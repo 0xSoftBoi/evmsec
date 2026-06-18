@@ -64,6 +64,28 @@ your file). ⚠️ The bundled entries are *illustrative* — verify every addre
 against the bridge's own source before trusting a number. A security tool fed
 the wrong escrow lies confidently.
 
+#### `solvency --since` — *when* did backing break? (forensic)
+
+After a hack, the question is "when did the bridge first go insolvent?"
+`--since` binary-searches block history to pin the exact destination-chain block
+where backing first dropped below the threshold — then lists the mint-token
+transfers in that block as candidate causes.
+
+```bash
+npm run evmsec -- solvency my-route --since 2024-01-01
+npm run evmsec -- solvency my-route --since 19000000   # or a block number
+```
+
+Because the invariant is cross-chain, the search axis is **time**: each
+destination-chain block is mapped to the source chain by timestamp, so locked
+and minted are compared at the same wall-clock moment. It checks the endpoints
+first (must be healthy at `--since`, breached at head) and converges in ~25
+probes over a 25M-block range.
+
+> Needs an **archive RPC** (historical `balanceOf`/`totalSupply`). Set
+> `ETHEREUM_RPC_URL` / `BASE_RPC_URL` / … to an archive endpoint; the public
+> fallbacks only serve recent state.
+
 ### `upgradeability` — who can rug this?
 
 ```bash

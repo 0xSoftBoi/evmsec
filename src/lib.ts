@@ -1,4 +1,4 @@
-import { JsonRpcProvider, Interface, getAddress, isAddress, dataSlice, keccak256, toUtf8Bytes } from "ethers";
+import { JsonRpcProvider, Block, Interface, getAddress, isAddress, dataSlice, keccak256, toUtf8Bytes } from "ethers";
 import { ChainConfig } from "./config.js";
 
 /** Minimal ERC-20 ABI for the reads this toolkit needs. */
@@ -9,6 +9,7 @@ export const ERC20_ABI = [
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
   "function owner() view returns (address)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
 ];
 
 export const erc20Interface = new Interface(ERC20_ABI);
@@ -65,6 +66,50 @@ export function addrLink(chain: ChainConfig, address: string): string {
   return `${chain.explorer}/address/${address}`;
 }
 
+export function blockLink(chain: ChainConfig, block: number): string {
+  return `${chain.explorer}/block/${block}`;
+}
+
 export function shortAddr(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+const blockCache = new Map<string, Block>();
+
+/** getBlock with a per-(chain,number) cache — bisection revisits the same blocks. */
+export async function getBlockCached(provider: JsonRpcProvider, chainKey: string, n: number): Promise<Block> {
+  const key = `${chainKey}:${n}`;
+  let b = blockCache.get(key);
+  if (!b) {
+    const fetched = await provider.getBlock(n);
+    if (!fetched) throw new Error(`block ${n} not found on ${chainKey}`);
+    b = fetched;
+    blockCache.set(key, b);
+  }
+  return b;
+}
+
+/**
+ * Highest block on `provider` whose timestamp is <= targetTs (binary search).
+ * Used to align the source chain to a destination-chain block's wall-clock time
+ * when checking a cross-chain invariant historically.
+ */
+export async function blockAtOrBefore(
+  provider: JsonRpcProvider,
+  chainKey: string,
+  targetTs: number,
+): Promise<number> {
+  const latest = await provider.getBlockNumber();
+  const head = await getBlockCached(provider, chainKey, latest);
+  if (head.timestamp <= targetTs) return latest;
+
+  let lo = 0;
+  let hi = latest;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const b = await getBlockCached(provider, chainKey, mid);
+    if (b.timestamp <= targetTs) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
 }

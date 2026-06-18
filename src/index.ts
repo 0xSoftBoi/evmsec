@@ -18,6 +18,8 @@ commands:
 
 solvency flags:
   --all                         check every route in the registry
+  --since <block|date>          forensic: binary-search history for the block
+                                  where backing first broke (needs archive RPC)
   --min-ratio <pct>             alert threshold (default 100)
   --json                        machine-readable output (for CI / monitoring)
   ad-hoc:  --lock-chain <c> --escrow 0x.. --token 0x.. --mint-chain <c> --minted 0x..
@@ -29,6 +31,7 @@ exit code is non-zero when a bridge is undercollateralized — drop it in a cron
 
 examples:
   evmsec solvency --all
+  evmsec solvency my-route --since 2024-01-01      # when did backing break?
   evmsec solvency --lock-chain ethereum --escrow 0xEsc --token 0xUSDC \\
                   --mint-chain polygon --minted 0xWrapped --json
   evmsec upgradeability 0xToken --chain base
