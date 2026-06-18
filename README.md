@@ -99,6 +99,31 @@ Reads EIP-1967 slots: is it an upgradeable proxy, what's the implementation, and
 is the upgrade admin a single EOA (one key from a rug) or a contract
 (multisig/timelock)?
 
+### `settlement` — did the cross-chain intent actually get filled?
+
+For [ERC-7683](https://eips.ethereum.org/EIPS/eip-7683) intents: decode the
+`Open` event on the source chain to learn what the filler *promised* to deliver
+(`maxSpent`), then check the destination `fill` tx really delivered that token
+and amount to the intended recipient, before the `fillDeadline`, and final.
+
+```bash
+npm run evmsec -- settlement \
+  --source-chain ethereum --intent-tx 0xOpenTxHash \
+  --fill-tx 0xFillTxHash [--dest-chain base] [--finality-depth 12] [--json]
+```
+
+Per output it reports `settled` / `unsettled` / `anomaly` and exits non-zero on
+anything but a clean settlement — catching missing fills, wrong-recipient fills,
+late fills, and underfills.
+
+This is a **packaging** tool, honestly scoped — settlement logic lives inside
+every solver, but not as a standalone auditor you can point at an arbitrary
+intent. **v1 limits:** ERC-7683 only (Across/CoW/UniswapX have their own
+formats); it verifies ERC-20 deliveries via Transfer logs (native-token outputs
+are flagged, not proven); it does **not** cryptographically verify cross-chain
+message proofs; and you supply the `--fill-tx` (auto-discovery needs an indexer
+— roadmap). Treat it as a settlement *audit helper*, not an oracle of truth.
+
 ## Supported chains
 
 `ethereum · base · arbitrum · optimism · polygon · sepolia · base-sepolia`
@@ -109,12 +134,15 @@ is the upgrade admin a single EOA (one key from a rug) or a contract
 ```
 src/
   config.ts                chains, RPCs
-  lib.ts                   provider cache, ERC-20 ABI, proxy slots, backing math, bisection
+  lib.ts                   provider cache, ABIs (ERC-20 / ERC-7683), proxy slots, math, bisection
   lib.test.ts              unit tests for the pure logic (no network)
+  settlement-core.ts       pure ERC-7683 delivery-matching + verdict logic
+  settlement-core.test.ts  unit tests for settlement logic (no network)
   bridges.ts               route registry loader
   commands/
     solvency.ts            flagship: lock-vs-mint backing check
     upgradeability.ts      EIP-1967 / legacy proxy admin risk
+    settlement.ts          ERC-7683 cross-chain intent fill verification
   index.ts                 CLI dispatcher
 bridges.json               route registry (verify before trusting)
 ```
@@ -137,6 +165,9 @@ tests on Node 20 and 22 for every push and PR.
 - `solvency --watch` — stream lock/mint events, alert the moment backing breaks
 - multi-asset bridges (sum escrows across many tokens)
 - a community-verified `bridges.json` registry
+- `settlement`: more intent formats (Across, CoW, UniswapX), auto-discovery of
+  the fill tx, cross-chain message-proof verification, and a `diagnose-failure`
+  forensic mode (the `solvency --since` bisection applied to settlements)
 
 ## Contributing
 

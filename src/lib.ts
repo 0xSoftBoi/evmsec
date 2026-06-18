@@ -14,6 +14,22 @@ export const ERC20_ABI = [
 
 export const erc20Interface = new Interface(ERC20_ABI);
 
+/**
+ * ERC-7683 `Open` event — emitted by the origin settler when an intent is
+ * created. Carries the full ResolvedCrossChainOrder, including `maxSpent`
+ * (the outputs the filler must deliver to the user on the destination chain).
+ */
+export const ERC7683_ABI = [
+  "event Open(bytes32 indexed orderId, tuple(address user, uint256 originChainId, uint32 openDeadline, uint32 fillDeadline, bytes32 orderId, tuple(bytes32 token, uint256 amount, bytes32 recipient, uint256 chainId)[] maxSpent, tuple(bytes32 token, uint256 amount, bytes32 recipient, uint256 chainId)[] minReceived, tuple(uint64 destinationChainId, bytes32 destinationSettler, bytes originData)[] fillInstructions) resolvedOrder)",
+];
+
+export const erc7683Interface = new Interface(ERC7683_ABI);
+
+/** ERC-7683 uses bytes32 for tokens/recipients (non-EVM support); take low 20 bytes. */
+export function bytes32ToAddress(word: string): string {
+  return getAddress(dataSlice(word, 12, 32));
+}
+
 /** EIP-1967 storage slots (used by transparent + UUPS proxies). */
 export const EIP1967 = {
   implementation: "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
@@ -101,6 +117,10 @@ export function addrLink(chain: ChainConfig, address: string): string {
 
 export function blockLink(chain: ChainConfig, block: number): string {
   return `${chain.explorer}/block/${block}`;
+}
+
+export function txLink(chain: ChainConfig, hash: string): string {
+  return `${chain.explorer}/tx/${hash}`;
 }
 
 export function shortAddr(address: string): string {

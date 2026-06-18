@@ -1,10 +1,12 @@
 #!/usr/bin/env tsx
 import { solvency } from "./commands/solvency.js";
 import { upgradeability } from "./commands/upgradeability.js";
+import { settlement } from "./commands/settlement.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   solvency,
   upgradeability,
+  settlement,
 };
 
 const HELP = `evmsec — a security CLI for EVM chains
@@ -15,6 +17,8 @@ commands:
   solvency <route-id|--all>     is a lock-and-mint bridge fully backed?
                                   (locked collateral ≥ wrapped supply minted)
   upgradeability <address>      EIP-1967 proxy check: upgradeable? who controls it?
+  settlement                    did an ERC-7683 cross-chain intent actually get
+                                  filled? (--source-chain --intent-tx --fill-tx)
 
 solvency flags:
   --all                         check every route in the registry
@@ -35,6 +39,8 @@ examples:
   evmsec solvency --lock-chain ethereum --escrow 0xEsc --token 0xUSDC \\
                   --mint-chain polygon --minted 0xWrapped --json
   evmsec upgradeability 0xToken --chain base
+  evmsec settlement --source-chain ethereum --intent-tx 0xOpen \\
+                    --fill-tx 0xFill
 `;
 
 async function main(): Promise<void> {

@@ -89,3 +89,8 @@ export function chain(key: string): ChainConfig {
   }
   return c;
 }
+
+/** Resolve a configured chain by numeric chainId (for cross-chain intent outputs). */
+export function chainById(id: number): ChainConfig | undefined {
+  return Object.values(CHAINS).find((c) => c.chainId === id);
+}

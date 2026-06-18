@@ -7,6 +7,7 @@ import {
   isUnderBacked,
   firstBreachBlock,
   addressFromSlot,
+  bytes32ToAddress,
   EIP1967,
   ZEPPELINOS,
 } from "./lib.js";
@@ -54,6 +55,12 @@ test("addressFromSlot extracts the low 20 bytes; zero -> null", () => {
   const padded = "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
   assert.equal(addressFromSlot(padded), "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
   assert.equal(addressFromSlot("0x" + "0".repeat(64)), null);
+});
+
+test("bytes32ToAddress: low 20 bytes, keeps zero (for native detection)", () => {
+  const padded = "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+  assert.equal(bytes32ToAddress(padded), "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+  assert.equal(bytes32ToAddress("0x" + "0".repeat(64)), "0x0000000000000000000000000000000000000000");
 });
 
 test("proxy slot constants are the known canonical values", () => {
