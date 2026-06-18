@@ -161,13 +161,15 @@ tests on Node 20 and 22 for every push and PR.
 
 ## Roadmap
 
+See [ROADMAP.md](./ROADMAP.md) for the full, scoped plan (each item is grounded
+in prior art with an approach + acceptance criteria, and has a tracking issue):
+
 - `mint-authority <token>` — who can mint; is ownership renounced?
-- `solvency --watch` — stream lock/mint events, alert the moment backing breaks
+- `solvency --watch` — alert the moment backing breaks
 - multi-asset bridges (sum escrows across many tokens)
-- a community-verified `bridges.json` registry
-- `settlement`: more intent formats (Across, CoW, UniswapX), auto-discovery of
-  the fill tx, cross-chain message-proof verification, and a `diagnose-failure`
-  forensic mode (the `solvency --since` bisection applied to settlements)
+- a CI-validated, community-verified `bridges.json` registry
+- `settlement`: more intent formats (Across, CoW, UniswapX), fill-tx
+  auto-discovery, cross-chain message-proof verification, `settlement diagnose`
 
 ## Contributing
 
