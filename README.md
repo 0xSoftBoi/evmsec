@@ -1,5 +1,8 @@
 # evmsec
 
+[![ci](https://github.com/0xSoftBoi/evmsec/actions/workflows/ci.yml/badge.svg)](https://github.com/0xSoftBoi/evmsec/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
 A small, focused **security CLI for EVM chains**. The flagship check answers the
 one question behind every nine-figure bridge hack:
 
@@ -106,14 +109,27 @@ is the upgrade admin a single EOA (one key from a rug) or a contract
 ```
 src/
   config.ts                chains, RPCs
-  lib.ts                   provider cache, ERC-20 ABI, EIP-1967 slots, math
+  lib.ts                   provider cache, ERC-20 ABI, proxy slots, backing math, bisection
+  lib.test.ts              unit tests for the pure logic (no network)
   bridges.ts               route registry loader
   commands/
     solvency.ts            flagship: lock-vs-mint backing check
-    upgradeability.ts      EIP-1967 proxy / admin risk
+    upgradeability.ts      EIP-1967 / legacy proxy admin risk
   index.ts                 CLI dispatcher
 bridges.json               route registry (verify before trusting)
 ```
+
+## Development
+
+```bash
+npm install
+npm run typecheck     # strict tsc
+npm test              # node:test via tsx — pure logic, no network
+```
+
+The backing math, the forensic bisection, and the proxy-slot parsing are
+unit-tested and run offline; CI (`.github/workflows/ci.yml`) runs typecheck +
+tests on Node 20 and 22 for every push and PR.
 
 ## Roadmap
 
@@ -124,8 +140,9 @@ bridges.json               route registry (verify before trusting)
 
 ## Contributing
 
-Verified bridge routes and new checks welcome. Every registry address must cite
-a primary source (the bridge's own deployment docs/contract).
+Verified bridge routes and new checks welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
+Every registry address must cite a primary source (the bridge's own deployment
+docs / verified contract); routes that can't be traced won't be merged.
 
 ## License
 

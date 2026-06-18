@@ -2,10 +2,13 @@ import { Contract, formatUnits } from "ethers";
 import { ChainConfig, chain } from "../config.js";
 import {
   ERC20_ABI,
+  backingPct,
   blockAtOrBefore,
   blockLink,
+  firstBreachBlock,
   getBlockCached,
   getProvider,
+  isUnderBacked,
   requireAddress,
   shortAddr,
   to18,
@@ -136,9 +139,7 @@ async function measure(ctx: RouteCtx, mintBlock?: number): Promise<Measurement> 
 }
 
 function isBreach(m: Measurement, minRatio: number): boolean {
-  if (m.minted18 === 0n) return false;
-  // locked/minted < minRatio%   ⇔   locked*10000 < minted*round(minRatio*100)
-  return m.locked18 * 10_000n < m.minted18 * BigInt(Math.round(minRatio * 100));
+  return isUnderBacked(m.locked18, m.minted18, minRatio);
 }
 
 // ── point-in-time check ─────────────────────────────────────────────────────
@@ -153,7 +154,7 @@ async function checkRoute(route: Route): Promise<SolvencyResult> {
     ratioPct = null;
     verdict = "NO_SUPPLY";
   } else {
-    ratioPct = Number((m.locked18 * 1_000_000n) / m.minted18) / 10_000;
+    ratioPct = backingPct(m.locked18, m.minted18);
     verdict = m.locked18 >= m.minted18 ? "BACKED" : "UNDERCOLLATERALIZED";
   }
 
@@ -211,17 +212,15 @@ async function bisect(route: Route, since: string, minRatio: number, json: boole
     return;
   }
 
-  // Invariant: lo healthy, hi breached. Converge to the boundary block.
-  let lo = start;
-  let hi = latest;
-  let probes = 0;
-  while (hi - lo > 1) {
-    const mid = lo + Math.floor((hi - lo) / 2);
-    probes++;
-    const m = await measure(ctx, mid);
-    if (isBreach(m, minRatio)) hi = mid;
-    else lo = mid;
-  }
+  // Invariant: healthy at `start`, breached at head. Converge to the boundary.
+  const { lastHealthy: lo, firstBroken: hi, probes } = await firstBreachBlock(
+    start,
+    latest,
+    async (n) => {
+      const m = await measure(ctx, n);
+      return isUnderBacked(m.locked18, m.minted18, minRatio);
+    },
+  );
 
   const lastHealthy = await measure(ctx, lo);
   const firstBroken = await measure(ctx, hi);
@@ -294,8 +293,8 @@ async function resolveSince(ctx: RouteCtx, since: string, latest: number): Promi
 // ── formatting ──────────────────────────────────────────────────────────────
 
 function ratio(m: Measurement): string {
-  if (m.minted18 === 0n) return "n/a";
-  return `${(Number((m.locked18 * 1_000_000n) / m.minted18) / 10_000).toFixed(2)}%`;
+  const pct = backingPct(m.locked18, m.minted18);
+  return pct === null ? "n/a" : `${pct.toFixed(2)}%`;
 }
 function fnum(ctx: RouteCtx, raw: bigint, side: "lock" | "mint"): string {
   return formatUnits(raw, side === "lock" ? ctx.lockDec : ctx.mintDec);

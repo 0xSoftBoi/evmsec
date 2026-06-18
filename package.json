@@ -4,12 +4,28 @@
   "description": "A security CLI for EVM chains. Flagship: bridge solvency — is a lock-and-mint bridge actually fully backed, or printing money?",
   "type": "module",
   "license": "MIT",
+  "author": "Tsolmondorj Natsagdorj (0xSoftBoi)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0xSoftBoi/evmsec.git"
+  },
   "bin": {
     "evmsec": "src/index.ts"
   },
+  "files": [
+    "src",
+    "bridges.json",
+    "tsconfig.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "evmsec": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "keywords": [
     "ethereum",
@@ -23,11 +39,11 @@
   ],
   "dependencies": {
     "dotenv": "^16.4.7",
-    "ethers": "^6.13.5"
+    "ethers": "^6.13.5",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }

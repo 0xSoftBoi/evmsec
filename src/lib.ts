@@ -62,6 +62,39 @@ export function to18(raw: bigint, decimals: number): bigint {
     : raw / 10n ** BigInt(decimals - 18);
 }
 
+/** Backing ratio in percent (locked/minted), or null when nothing is minted. */
+export function backingPct(locked18: bigint, minted18: bigint): number | null {
+  if (minted18 === 0n) return null;
+  return Number((locked18 * 1_000_000n) / minted18) / 10_000;
+}
+
+/** True when locked/minted < minRatioPct — i.e. undercollateralized vs threshold. */
+export function isUnderBacked(locked18: bigint, minted18: bigint, minRatioPct: number): boolean {
+  if (minted18 === 0n) return false;
+  // locked/minted < minRatioPct%  ⇔  locked*10000 < minted*round(minRatioPct*100)
+  return locked18 * 10_000n < minted18 * BigInt(Math.round(minRatioPct * 100));
+}
+
+/**
+ * Find the first integer in (lo, hi] where `isBreached` flips to true, assuming
+ * it is false at lo and true at hi (monotonic transition). Returns the boundary
+ * and probe count; converges in ~log2(hi - lo) calls to `isBreached`.
+ */
+export async function firstBreachBlock(
+  lo: number,
+  hi: number,
+  isBreached: (n: number) => Promise<boolean>,
+): Promise<{ lastHealthy: number; firstBroken: number; probes: number }> {
+  let probes = 0;
+  while (hi - lo > 1) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    probes++;
+    if (await isBreached(mid)) hi = mid;
+    else lo = mid;
+  }
+  return { lastHealthy: lo, firstBroken: hi, probes };
+}
+
 export function addrLink(chain: ChainConfig, address: string): string {
   return `${chain.explorer}/address/${address}`;
 }
