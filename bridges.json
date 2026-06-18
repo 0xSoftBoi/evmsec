@@ -1,0 +1,20 @@
+{
+  "_comment": "Illustrative routes — VERIFY every address against the bridge's own docs/source before trusting a result. Override with EVMSEC_BRIDGES=/path/to/your.json. Contributions of verified routes welcome.",
+  "routes": [
+    {
+      "id": "example-usdc-eth-to-polygon",
+      "bridge": "Polygon PoS (example — verify)",
+      "asset": "USDC.e",
+      "lock": {
+        "chain": "ethereum",
+        "escrow": "0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf",
+        "token": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      },
+      "mint": {
+        "chain": "polygon",
+        "token": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+      },
+      "notes": "Polygon PoS ERC20 bridge: tokens lock in the RootChainManager/predicate on L1 and a mapped child token is minted on Polygon. Addresses here are illustrative — confirm the current predicate/escrow before relying on the number."
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "evmsec",
+  "version": "0.1.0",
+  "description": "A security CLI for EVM chains. Flagship: bridge solvency — is a lock-and-mint bridge actually fully backed, or printing money?",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "evmsec": "src/index.ts"
+  },
+  "scripts": {
+    "evmsec": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ethereum",
+    "evm",
+    "security",
+    "bridge",
+    "solvency",
+    "proof-of-reserves",
+    "cross-chain",
+    "audit"
+  ],
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
