@@ -17,8 +17,9 @@ test("precompileCalls: detects ecrecover (0x01) near a call", () => {
   assert.deepEqual(precompileCalls(ECRECOVER), [1]);
 });
 
-test("precompileCalls: detects PQ precompile pushed as PUSH2", () => {
-  assert.deepEqual(precompileCalls(PQ_PRECOMPILE), [0x0101]);
+test("precompileCalls: values above the EIP-2537 range are not treated as precompiles", () => {
+  // 0x0101 is a common constant, not a precompile address — must be ignored
+  assert.deepEqual(precompileCalls(PQ_PRECOMPILE), []);
 });
 
 test("precompileCalls: a pushed constant with no following call is ignored", () => {
@@ -27,6 +28,11 @@ test("precompileCalls: a pushed constant with no following call is ignored", () 
 
 test("precompileCalls: a call with no address push finds nothing", () => {
   assert.deepEqual(precompileCalls(STATICCALL_ONLY), []);
+});
+
+test("precompileCalls: DELEGATECALL near 0x01 is NOT a precompile call (proxy guard)", () => {
+  // 0x6001f4 = PUSH1 0x01, DELEGATECALL — a proxy pattern, must not flag as ecrecover
+  assert.deepEqual(precompileCalls("0x6001f4"), []);
 });
 
 test("precompileCalls: a 0xfa byte inside a PUSH immediate is not a STATICCALL", () => {
@@ -79,16 +85,15 @@ test("classifyScheme: EIP-2537 BLS precompile → bls-pairing", () => {
   assert.equal(v.quantumVulnerable, true);
 });
 
-test("classifyScheme: custom PQ precompile → pq, NOT quantum-vulnerable", () => {
+test("classifyScheme: PQ readiness is NOT asserted from bytecode (no false 'safe')", () => {
+  // a high custom precompile address is ignored → unknown, never "safe"
   const v = classifyScheme({ bytecode: PQ_PRECOMPILE });
-  assert.equal(v.scheme, "pq");
-  assert.equal(v.quantumVulnerable, false);
+  assert.equal(v.scheme, "unknown");
+  assert.equal(v.quantumVulnerable, null); // never false
 });
 
-test("classifyScheme: a quantum-vulnerable indicator dominates a PQ one", () => {
-  // verifier that calls BOTH ecrecover and a PQ precompile → still vulnerable
-  const hybrid = "0x6001fa610101fa";
-  const v = classifyScheme({ bytecode: hybrid });
+test("classifyScheme: ecrecover still dominates when other constants are present", () => {
+  const v = classifyScheme({ bytecode: "0x6001fa610101fa" });
   assert.equal(v.quantumVulnerable, true);
 });
 

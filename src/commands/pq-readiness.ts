@@ -42,9 +42,8 @@ const LABEL: Record<SchemeVerdict["scheme"], string> = {
   eoa: "EOA signer (ECDSA secp256k1)",
   ecdsa: "ECDSA (ecrecover)",
   "bls-pairing": "BLS / pairing-based",
-  pq: "post-quantum (lattice/custom precompile)",
   "sig-interface": "signature interface, scheme unclear",
-  unknown: "unknown",
+  unknown: "no vulnerable primitive detected (not a safety claim)",
 };
 
 function print(chainName: string, target: string, link: string, v: SchemeVerdict): void {

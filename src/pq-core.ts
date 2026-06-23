@@ -21,9 +21,14 @@ export type Scheme =
   | "eoa" // signer is an externally-owned account → ECDSA secp256k1
   | "ecdsa" // calls the ecrecover precompile
   | "bls-pairing" // calls a pairing / BLS precompile (bn254 or EIP-2537)
-  | "pq" // calls a custom precompile in the PQ range (e.g. ML-DSA)
   | "sig-interface" // exposes a signature-verification interface, scheme unclear
   | "unknown";
+
+// Note on PQ: we deliberately do NOT positively assert "post-quantum / safe" from
+// bytecode. The EIP-8051 ML-DSA precompiles (0x12/0x13) and any custom PQ precompile
+// addresses collide with extremely common constants (e.g. decimals = 18 = 0x12), so a
+// positive PQ claim would be unreliable — and a false "safe" verdict is worse than none.
+// The tool flags VULNERABLE or returns UNKNOWN; PQ-readiness is confirmed from source.
 
 export interface SchemeVerdict {
   scheme: Scheme;
@@ -38,10 +43,11 @@ const PUSH1 = 0x60;
 const PUSH4 = 0x63;
 const PUSH32 = 0x7f;
 const CALL = 0xf1;
-const CALLCODE = 0xf2;
-const DELEGATECALL = 0xf4;
 const STATICCALL = 0xfa;
-const CALL_OPS = new Set([CALL, CALLCODE, DELEGATECALL, STATICCALL]);
+// Precompiles are invoked with CALL or STATICCALL only — never DELEGATECALL/CALLCODE
+// (you can't delegatecall into a precompile). Excluding those avoids false positives on
+// proxies, which delegatecall constantly and often push small constants nearby.
+const CALL_OPS = new Set([CALL, STATICCALL]);
 
 /** ERC-1271 and related signature-verification selectors (scheme-agnostic). */
 const SELECTORS: Record<string, string> = {
@@ -72,8 +78,10 @@ export function precompileCalls(bytecode: string): number[] {
       if (n <= 2) {
         let v = 0;
         for (let j = 1; j <= n && i + j < code.length; j++) v = (v << 8) | code[i + j];
-        // precompiles live in 0x01..0x12; custom PQ precompiles probed up to 0x01ff
-        if (v >= 1 && v <= 0x01ff) {
+        // Only the standardized precompile range we classify (ecrecover .. EIP-2537 BLS).
+        // Capping here keeps large constants (memory offsets, 0x0101-style values) out of
+        // the window so they can't be mistaken for precompile addresses.
+        if (v >= 1 && v <= 0x11) {
           window.push(v);
           if (window.length > WINDOW) window.shift();
         }
@@ -140,7 +148,6 @@ export function classifyScheme(opts: { bytecode: string; isEoa?: boolean }): Sch
   const indicators: string[] = [];
   let ecdsa = false;
   let bls = false;
-  let pq = false;
 
   for (const a of calls) {
     const hex = `0x${a.toString(16).padStart(2, "0")}`;
@@ -150,19 +157,16 @@ export function classifyScheme(opts: { bytecode: string; isEoa?: boolean }): Sch
     } else if (a === 0x08) {
       bls = true;
       indicators.push(`calls bn254 pairing precompile (0x08) → pairing/BLS or SNARK over a Shor-breakable curve`);
-    } else if (a >= 0x0b && a <= 0x12) {
+    } else if (a >= 0x0b && a <= 0x11) {
       bls = true;
       indicators.push(`calls EIP-2537 BLS12-381 precompile (${hex}) → BLS signatures (Shor-breakable)`);
-    } else if (a >= 0x0100 && a <= 0x01ff) {
-      pq = true;
-      indicators.push(`calls custom precompile (${hex}) → possible PQ verifier (e.g. ML-DSA/0x0101) — verify the source`);
     }
   }
 
   for (const s of detectSelectors(opts.bytecode)) indicators.push(`exposes ${s}`);
 
-  // A quantum-vulnerable indicator dominates: if the verifier reaches for
-  // ECDSA/BLS at all, the migration debt is present regardless of anything else.
+  // A quantum-vulnerable indicator dominates. Otherwise we return UNKNOWN — never a
+  // positive "safe" claim, which bytecode can't support (see the note on Scheme above).
   if (ecdsa || bls) {
     return {
       scheme: bls && !ecdsa ? "bls-pairing" : "ecdsa",
@@ -171,9 +175,6 @@ export function classifyScheme(opts: { bytecode: string; isEoa?: boolean }): Sch
       indicators,
     };
   }
-  if (pq) {
-    return { scheme: "pq", quantumVulnerable: false, confidence: "low", indicators };
-  }
   if (indicators.length) {
     return { scheme: "sig-interface", quantumVulnerable: null, confidence: "low", indicators };
   }
@@ -181,6 +182,6 @@ export function classifyScheme(opts: { bytecode: string; isEoa?: boolean }): Sch
     scheme: "unknown",
     quantumVulnerable: null,
     confidence: "low",
-    indicators: ["no recognizable signature-scheme indicators in bytecode — verify the source manually"],
+    indicators: ["no quantum-vulnerable primitive detected in bytecode — NOT a safety claim; confirm the scheme from source"],
   };
 }

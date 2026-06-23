@@ -148,10 +148,16 @@ confidence. **Exit code is non-zero when quantum-vulnerable**, so it drops into 
 evmsec pq-readiness 0xBridgeVerifier || alert "bridge signatures are Shor-breakable"
 ```
 
-Honestly scoped: this is a **heuristic bytecode scanner**, not a proof. Precompile-
-call detection favors recall (it can over-flag), so it ships a confidence and lists
-what it saw. Always verify against the verifier's source. The pure detection logic
-(`pq-core.ts`) is unit-tested offline.
+Honestly scoped: this is a **heuristic bytecode scanner**, not a proof. It flags
+**vulnerable** or returns **unknown** — it never asserts "post-quantum / safe" from
+bytecode (those precompile addresses collide with common constants like `decimals = 18`).
+Resolve proxies first (`upgradeability`) and confirm from source. The pure detection
+logic (`pq-core.ts`) is unit-tested offline.
+
+**Audit methodology.** The scoring rubric and workflow around this command —
+triage → resolve proxies → confirm from source → score → remediate — are written up in
+[`PQ_MIGRATION_AUDIT.md`](PQ_MIGRATION_AUDIT.md), with a worked
+[sample report](examples/sample-pq-readiness-report.md) on mainnet contracts.
 
 ## Supported chains
 
