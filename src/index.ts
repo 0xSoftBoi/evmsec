@@ -2,11 +2,13 @@
 import { solvency } from "./commands/solvency.js";
 import { upgradeability } from "./commands/upgradeability.js";
 import { settlement } from "./commands/settlement.js";
+import { pqReadiness } from "./commands/pq-readiness.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   solvency,
   upgradeability,
   settlement,
+  "pq-readiness": pqReadiness,
 };
 
 const HELP = `evmsec — a security CLI for EVM chains
@@ -19,6 +21,8 @@ commands:
   upgradeability <address>      EIP-1967 proxy check: upgradeable? who controls it?
   settlement                    did an ERC-7683 cross-chain intent actually get
                                   filled? (--source-chain --intent-tx --fill-tx)
+  pq-readiness <address>        is this verifier post-quantum ready, or
+                                  Shor-breakable? (ECDSA/BLS vs ML-DSA/lattice)
 
 solvency flags:
   --all                         check every route in the registry
@@ -41,6 +45,7 @@ examples:
   evmsec upgradeability 0xToken --chain base
   evmsec settlement --source-chain ethereum --intent-tx 0xOpen \\
                     --fill-tx 0xFill
+  evmsec pq-readiness 0xVerifier --chain ethereum --json
 `;
 
 async function main(): Promise<void> {

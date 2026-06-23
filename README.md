@@ -124,6 +124,35 @@ are flagged, not proven); it does **not** cryptographically verify cross-chain
 message proofs; and you supply the `--fill-tx` (auto-discovery needs an indexer
 — roadmap). Treat it as a settlement *audit helper*, not an oracle of truth.
 
+### `pq-readiness` — is this verifier quantum-safe, or printing forgeries later?
+
+When a large quantum computer can run Shor's algorithm, every signature scheme
+built on elliptic-curve discrete log — **ECDSA secp256k1, BLS, pairings** — is
+forgeable. A bridge whose attestation gate, multisig, or token admin rests on
+those carries **cryptographic migration debt**. Of the named institutional
+digital-asset programs, ~0 have a disclosed post-quantum roadmap.
+
+`pq-readiness` classifies the primitive a verifier reaches for, straight from its
+deployed bytecode — which precompiles it calls (`ecrecover` 0x01, bn254 pairing
+0x08, EIP-2537 BLS 0x0b–0x12, or a custom PQ precompile like an ML-DSA verifier),
+and whether it's an EOA (incl. **EIP-7702** delegated accounts — still ECDSA-keyed).
+
+```bash
+npm run evmsec -- pq-readiness 0xVerifier --chain ethereum [--json]
+```
+
+Reports the scheme, a quantum-vulnerable verdict, the indicators it found, and a
+confidence. **Exit code is non-zero when quantum-vulnerable**, so it drops into CI:
+
+```bash
+evmsec pq-readiness 0xBridgeVerifier || alert "bridge signatures are Shor-breakable"
+```
+
+Honestly scoped: this is a **heuristic bytecode scanner**, not a proof. Precompile-
+call detection favors recall (it can over-flag), so it ships a confidence and lists
+what it saw. Always verify against the verifier's source. The pure detection logic
+(`pq-core.ts`) is unit-tested offline.
+
 ## Supported chains
 
 `ethereum · base · arbitrum · optimism · polygon · sepolia · base-sepolia`
@@ -137,12 +166,15 @@ src/
   lib.ts                   provider cache, ABIs (ERC-20 / ERC-7683), proxy slots, math, bisection
   lib.test.ts              unit tests for the pure logic (no network)
   settlement-core.ts       pure ERC-7683 delivery-matching + verdict logic
+  pq-core.ts               pure post-quantum scheme classification (bytecode → verdict)
+  pq-core.test.ts          unit tests for the PQ classifier (no network)
   settlement-core.test.ts  unit tests for settlement logic (no network)
   bridges.ts               route registry loader
   commands/
     solvency.ts            flagship: lock-vs-mint backing check
     upgradeability.ts      EIP-1967 / legacy proxy admin risk
     settlement.ts          ERC-7683 cross-chain intent fill verification
+    pq-readiness.ts        post-quantum readiness of a verifier (Shor-breakable?)
   index.ts                 CLI dispatcher
 bridges.json               route registry (verify before trusting)
 ```
