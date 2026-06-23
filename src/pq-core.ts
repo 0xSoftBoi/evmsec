@@ -118,7 +118,7 @@ export function detectSelectors(bytecode: string): string[] {
  * EOA). Combines precompile-call and selector evidence into a verdict.
  */
 export function classifyScheme(opts: { bytecode: string; isEoa?: boolean }): SchemeVerdict {
-  if (opts.isEoa || !opts.bytecode || opts.bytecode === "0x") {
+  if (opts.isEoa === true || (opts.isEoa !== false && (!opts.bytecode || opts.bytecode === "0x"))) {
     return {
       scheme: "eoa",
       quantumVulnerable: true,

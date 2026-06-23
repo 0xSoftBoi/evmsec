@@ -108,3 +108,49 @@ test("classifyScheme: nothing recognizable → unknown", () => {
   assert.equal(v.scheme, "unknown");
   assert.equal(v.quantumVulnerable, null);
 });
+
+// ── coverage hardening (from the deep review) ──────────────────────────────
+test("precompileCalls: CALL (0xf1) detects like STATICCALL (0xfa)", () => {
+  assert.deepEqual(precompileCalls("0x6001f1"), [1]);
+});
+
+test("precompileCalls: multiple precompiles are detected and sorted", () => {
+  assert.deepEqual(precompileCalls("0x6001fa6008fa"), [1, 8]);
+});
+
+test("precompileCalls: window evicts the oldest push past WINDOW=10", () => {
+  // PUSH1 0x01, then 10× PUSH1 0x02, then STATICCALL — the 0x01 is evicted
+  assert.deepEqual(precompileCalls("0x6001" + "6002".repeat(10) + "fa"), [2]);
+});
+
+test("detectSelectors: bytecode ending mid-PUSH4 immediate returns nothing", () => {
+  assert.deepEqual(detectSelectors("0x631626ba"), []); // only 3 of 4 selector bytes
+});
+
+test("classifyScheme: both ecrecover and bn254 present → ecdsa dominates", () => {
+  const v = classifyScheme({ bytecode: "0x6001fa6008fa" });
+  assert.equal(v.scheme, "ecdsa");
+  assert.equal(v.quantumVulnerable, true);
+  assert.ok(v.indicators.some((i) => i.includes("ecrecover")));
+  assert.ok(v.indicators.some((i) => i.includes("bn254")));
+});
+
+test("classifyScheme: a vulnerable precompile dominates an ERC-1271 selector", () => {
+  const v = classifyScheme({ bytecode: "0x6001fa631626ba7e" });
+  assert.equal(v.scheme, "ecdsa");
+  assert.equal(v.quantumVulnerable, true);
+  assert.ok(v.indicators.some((i) => i.includes("ERC-1271")));
+});
+
+test("classifyScheme: EIP-7702 prefix with wrong length is not treated as a delegated EOA", () => {
+  const short = classifyScheme({ bytecode: "0xef0100" + "11".repeat(19) }); // 19-byte delegate
+  assert.equal(short.scheme, "unknown");
+  const long = classifyScheme({ bytecode: "0xef0100" + "11".repeat(21) }); // 21-byte delegate
+  assert.equal(long.scheme, "unknown");
+});
+
+test("classifyScheme: explicit isEoa=false is not overridden by empty bytecode", () => {
+  const v = classifyScheme({ bytecode: "0x", isEoa: false });
+  assert.equal(v.scheme, "unknown");
+  assert.equal(v.quantumVulnerable, null);
+});

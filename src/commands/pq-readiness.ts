@@ -25,7 +25,14 @@ export async function pqReadiness(args: string[]): Promise<void> {
   const provider = getProvider(c);
   const target = requireAddress(address);
 
-  const code = await provider.getCode(target);
+  let code: string;
+  try {
+    code = await provider.getCode(target);
+  } catch (err) {
+    throw new Error(
+      `failed to fetch bytecode for ${target} on ${c.name}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   const isEoa = code === "0x";
   const verdict = classifyScheme({ bytecode: code, isEoa });
 
@@ -47,12 +54,12 @@ const LABEL: Record<SchemeVerdict["scheme"], string> = {
 };
 
 function print(chainName: string, target: string, link: string, v: SchemeVerdict): void {
+  // classifyScheme only ever returns `true` or `null` — it never positively asserts
+  // "safe" from bytecode — so there are exactly two verdict states.
   const verdict =
     v.quantumVulnerable === true
       ? "⚠ QUANTUM-VULNERABLE — Shor-breakable signatures"
-      : v.quantumVulnerable === false
-        ? "✓ post-quantum primitive detected"
-        : "? indeterminate — verify the source";
+      : "? indeterminate — verify the source";
 
   console.log(`\nPQ-readiness — ${target} on ${chainName}`);
   console.log("─".repeat(64));
@@ -74,8 +81,13 @@ function parse(args: string[]): { address?: string; chainKey: string; json: bool
   let chainKey = "ethereum";
   let json = false;
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--chain" || args[i] === "-c") chainKey = args[++i];
-    else if (args[i] === "--json") json = true;
+    if (args[i] === "--chain" || args[i] === "-c") {
+      const next = args[i + 1];
+      if (next === undefined || next.startsWith("-")) {
+        throw new Error("--chain requires a value (e.g. --chain ethereum)");
+      }
+      chainKey = args[++i];
+    } else if (args[i] === "--json") json = true;
     else if (!address) address = args[i];
   }
   return { address, chainKey, json };
