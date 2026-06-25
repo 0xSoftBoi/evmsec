@@ -9,11 +9,16 @@ import {
   getBlockCached,
   getProvider,
   isUnderBacked,
+  mapWithConcurrency,
   requireAddress,
   shortAddr,
   to18,
+  withRetry,
 } from "../lib.js";
 import { Route, loadRoutes, findRoute } from "../bridges.js";
+
+/** How many routes `--all` checks at once (override via EVMSEC_CONCURRENCY). */
+const ROUTE_CONCURRENCY = Number(process.env.EVMSEC_CONCURRENCY) || 5;
 
 interface SolvencyResult {
   id: string;
@@ -25,7 +30,9 @@ interface SolvencyResult {
   minted: string;
   ratioPct: number | null;
   delta: string;
-  verdict: "BACKED" | "UNDERCOLLATERALIZED" | "NO_SUPPLY";
+  verdict: "BACKED" | "UNDERCOLLATERALIZED" | "NO_SUPPLY" | "ERROR";
+  /** Present only when verdict is ERROR — the read that failed. */
+  error?: string;
 }
 
 /**
@@ -55,16 +62,44 @@ export async function solvency(args: string[]): Promise<void> {
     );
   }
 
-  const results: SolvencyResult[] = [];
-  for (const route of routes) results.push(await checkRoute(route));
+  // Check routes with bounded concurrency; isolate failures so one unreadable
+  // route (bad RPC, renamed contract) can't abort the whole scan or mask the
+  // others — it surfaces as an ERROR result instead.
+  const results = await mapWithConcurrency(routes, ROUTE_CONCURRENCY, (route) => checkRouteSafe(route));
 
   if (opts.json) console.log(JSON.stringify(results, null, 2));
   else render(results, opts.minRatio);
 
-  const breached = results.some(
-    (r) => r.verdict === "UNDERCOLLATERALIZED" || (r.ratioPct !== null && r.ratioPct < opts.minRatio),
+  // Non-zero exit on a breach OR on a route we couldn't verify — in CI, an
+  // unconfirmable backing check is itself a failure, not a pass.
+  const failed = results.some(
+    (r) =>
+      r.verdict === "UNDERCOLLATERALIZED" ||
+      r.verdict === "ERROR" ||
+      (r.ratioPct !== null && r.ratioPct < opts.minRatio),
   );
-  if (breached) process.exitCode = 1;
+  if (failed) process.exitCode = 1;
+}
+
+/** checkRoute, but a thrown read becomes an ERROR result rather than aborting `--all`. */
+async function checkRouteSafe(route: Route): Promise<SolvencyResult> {
+  try {
+    return await checkRoute(route);
+  } catch (err) {
+    return {
+      id: route.id,
+      bridge: route.bridge,
+      asset: route.asset,
+      lockChain: route.lock.chain,
+      mintChain: route.mint.chain,
+      locked: "—",
+      minted: "—",
+      ratioPct: null,
+      delta: "—",
+      verdict: "ERROR",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 // ── measurement ─────────────────────────────────────────────────────────────
@@ -87,8 +122,8 @@ async function loadCtx(route: Route): Promise<RouteCtx> {
   const lockToken = new Contract(requireAddress(route.lock.token, "lock token"), ERC20_ABI, getProvider(lockChain));
   const mintToken = new Contract(requireAddress(route.mint.token, "mint token"), ERC20_ABI, getProvider(mintChain));
   const [lockDec, mintDec] = await Promise.all([
-    lockToken.decimals().then(Number) as Promise<number>,
-    mintToken.decimals().then(Number) as Promise<number>,
+    withRetry(() => lockToken.decimals(), { label: "lock decimals" }).then(Number),
+    withRetry(() => mintToken.decimals(), { label: "mint decimals" }).then(Number),
   ]);
   return {
     route,
@@ -118,13 +153,17 @@ interface Measurement {
  */
 async function measure(ctx: RouteCtx, mintBlock?: number): Promise<Measurement> {
   const mintProvider = getProvider(ctx.mintChain);
-  const resolvedMintBlock = mintBlock ?? (await mintProvider.getBlockNumber());
+  const resolvedMintBlock = mintBlock ?? (await withRetry(() => mintProvider.getBlockNumber(), { label: "mint head" }));
   const ts = (await getBlockCached(mintProvider, ctx.mintChain.key, resolvedMintBlock)).timestamp;
   const lockBlock = await blockAtOrBefore(getProvider(ctx.lockChain), ctx.lockChain.key, ts);
 
   const [lockedRaw, mintedRaw] = await Promise.all([
-    ctx.lockToken.balanceOf(ctx.escrow, { blockTag: lockBlock }) as Promise<bigint>,
-    ctx.mintToken.totalSupply({ blockTag: resolvedMintBlock }) as Promise<bigint>,
+    withRetry(() => ctx.lockToken.balanceOf(ctx.escrow, { blockTag: lockBlock }), {
+      label: "balanceOf",
+    }) as Promise<bigint>,
+    withRetry(() => ctx.mintToken.totalSupply({ blockTag: resolvedMintBlock }), {
+      label: "totalSupply",
+    }) as Promise<bigint>,
   ]);
 
   return {
@@ -337,6 +376,13 @@ function envName(key: string): string {
 
 function render(results: SolvencyResult[], minRatio: number): void {
   for (const r of results) {
+    if (r.verdict === "ERROR") {
+      console.log(`\n✗ ${r.bridge} — ${r.asset}  [${r.id}]`);
+      console.log("─".repeat(64));
+      console.log(`  verdict  ERROR — could not verify backing`);
+      console.log(`           ${r.error}`);
+      continue;
+    }
     const mark = r.verdict === "BACKED" && (r.ratioPct ?? 0) >= minRatio ? "✓" : r.verdict === "NO_SUPPLY" ? "·" : "✗";
     const ratioStr = r.ratioPct === null ? "n/a" : `${r.ratioPct.toFixed(2)}%`;
     console.log(`\n${mark} ${r.bridge} — ${r.asset}  [${r.id}]`);

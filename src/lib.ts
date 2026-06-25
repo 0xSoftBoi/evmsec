@@ -1,4 +1,14 @@
-import { JsonRpcProvider, Block, Interface, getAddress, isAddress, dataSlice, keccak256, toUtf8Bytes } from "ethers";
+import {
+  JsonRpcProvider,
+  FetchRequest,
+  Block,
+  Interface,
+  getAddress,
+  isAddress,
+  dataSlice,
+  keccak256,
+  toUtf8Bytes,
+} from "ethers";
 import { ChainConfig } from "./config.js";
 
 /** Minimal ERC-20 ABI for the reads this toolkit needs. */
@@ -47,16 +57,87 @@ export const ZEPPELINOS = {
   admin: keccak256(toUtf8Bytes("org.zeppelinos.proxy.admin")),
 } as const;
 
+// ── RPC resilience ──────────────────────────────────────────────────────────
+// Public RPCs are flaky: a single transient blip (timeout, 429, 5xx, reset)
+// should not abort a CI solvency check. We give every provider a request
+// timeout and wrap reads in a bounded exponential-backoff retry.
+
+/** Per-request RPC timeout in ms (override via EVMSEC_RPC_TIMEOUT_MS). */
+export const RPC_TIMEOUT_MS = Number(process.env.EVMSEC_RPC_TIMEOUT_MS) || 20_000;
+/** How many times to retry a transient RPC failure (override via EVMSEC_RPC_RETRIES). */
+export const RPC_RETRIES = Number(process.env.EVMSEC_RPC_RETRIES) || 3;
+
 const providers = new Map<string, JsonRpcProvider>();
 
 /** One cached provider per chain, reused within a command run. */
 export function getProvider(chain: ChainConfig): JsonRpcProvider {
   let p = providers.get(chain.key);
   if (!p) {
-    p = new JsonRpcProvider(chain.rpcUrl, chain.chainId, { staticNetwork: true });
+    const req = new FetchRequest(chain.rpcUrl);
+    req.timeout = RPC_TIMEOUT_MS;
+    p = new JsonRpcProvider(req, chain.chainId, { staticNetwork: true });
     providers.set(chain.key, p);
   }
   return p;
+}
+
+const TRANSIENT_RPC =
+  /timeout|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up|network error|fetch failed|rate.?limit|429|too many requests|throttl|502|503|504|bad gateway|service unavailable|SERVER_ERROR|TIMEOUT/i;
+
+/** Heuristic: is this error a transient RPC condition worth retrying? */
+export function isTransientRpcError(err: unknown): boolean {
+  if (err == null) return false;
+  const e = err as { message?: unknown; code?: unknown; shortMessage?: unknown; info?: unknown };
+  const parts = [e.message, e.code, e.shortMessage, e.info && JSON.stringify(e.info), String(err)];
+  return parts.some((p) => p != null && TRANSIENT_RPC.test(String(p)));
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Run an async RPC read with bounded exponential-backoff retry on transient
+ * failures. Non-transient errors (revert, bad input) throw immediately — a
+ * security tool must not paper over a real failure as if it were a blip.
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { retries?: number; baseDelayMs?: number; label?: string } = {},
+): Promise<T> {
+  const retries = opts.retries ?? RPC_RETRIES;
+  const base = opts.baseDelayMs ?? 250;
+  let lastErr: unknown;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= retries || !isTransientRpcError(err)) throw err;
+      await sleep(base * 2 ** attempt);
+    }
+  }
+  throw lastErr; // unreachable; satisfies the type checker
+}
+
+/**
+ * Map over items with bounded concurrency, preserving input order. Lets
+ * `solvency --all` check many routes in parallel instead of strictly serially,
+ * without opening an unbounded number of RPC connections at once.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (let i = next++; i < items.length; i = next++) {
+      results[i] = await fn(items[i], i);
+    }
+  };
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker);
+  await Promise.all(workers);
+  return results;
 }
 
 export function requireAddress(input: string, label = "address"): string {
@@ -132,7 +213,7 @@ export async function getBlockCached(provider: JsonRpcProvider, chainKey: string
   const key = `${chainKey}:${n}`;
   let b = blockCache.get(key);
   if (!b) {
-    const fetched = await provider.getBlock(n);
+    const fetched = await withRetry(() => provider.getBlock(n), { label: `getBlock ${chainKey}:${n}` });
     if (!fetched) throw new Error(`block ${n} not found on ${chainKey}`);
     b = fetched;
     blockCache.set(key, b);
@@ -146,7 +227,7 @@ export async function getBlockCached(provider: JsonRpcProvider, chainKey: string
  * when checking a cross-chain invariant historically.
  */
 export async function blockAtOrBefore(provider: JsonRpcProvider, chainKey: string, targetTs: number): Promise<number> {
-  const latest = await provider.getBlockNumber();
+  const latest = await withRetry(() => provider.getBlockNumber(), { label: `getBlockNumber ${chainKey}` });
   const head = await getBlockCached(provider, chainKey, latest);
   if (head.timestamp <= targetTs) return latest;
 

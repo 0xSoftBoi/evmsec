@@ -6,23 +6,22 @@ Effort: **S** ≈ a day, **M** ≈ a few days, **L** ≈ a week+.
 
 ---
 
-## 1. `mint-authority <token>` — who can mint this token? **[S]**
+## 1. `mint-authority <token>` — who can mint this token? ✅ **shipped**
 
-**Why.** An ERC-20 whose mint is controlled by a single EOA is one key away from
-infinite issuance — the same trust question `upgradeability` asks for proxies.
-No dedicated open-source EVM CLI surfaces this (the concept is well understood —
-`Ownable` / AccessControl `MINTER_ROLE` / a supply `cap` — but unpackaged).
+An ERC-20 whose mint is controlled by a single EOA is one key away from infinite
+issuance — the same trust question `upgradeability` asks for proxies.
 
-**Approach.**
+Shipped in `mint-authority` / `mint-authority-core.ts`: follows the proxy to its
+implementation, scans bytecode for mint/burn/pause entrypoints and the auth model
+(Ownable vs AccessControl), reads `owner()` and classifies it
+(renounced / EOA / contract), and exits non-zero when an inflatable supply sits
+under a single EOA. Pure classification logic is unit-tested.
 
-- Read `owner()` (Ownable) and detect ownership renounced (`owner == 0`).
-- Probe AccessControl: `getRoleMemberCount(MINTER_ROLE)` / `hasRole`, common role hashes.
-- Detect a supply cap (`cap()` / `maxSupply()`); flag uncapped + mintable.
-- Classify the controller as EOA / contract (reuse `upgradeability`'s EOA check).
+**Still open (follow-ups).**
 
-**Acceptance.** Given `<token> --chain`, report the mint-control surface (who,
-capped?, renounced?) and exit non-zero when mint is controlled by a single EOA
-with no cap. Pure classification logic unit-tested.
+- Enumerate `MINTER_ROLE` holders from `RoleGranted` events (bytecode can't list them).
+- Detect a supply cap (`cap()` / `maxSupply()`) and flag uncapped + mintable.
+- Resolve a `masterMinter`-style indirection where minting isn't gated by `owner()`.
 
 ## 2. `solvency --watch` — alert the moment backing breaks **[M]**
 

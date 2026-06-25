@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`mint-authority <token>` command**: answers "can the wrapped supply be
+  inflated, and by whom?" — the rug vector `solvency` doesn't cover. Follows the
+  proxy to its implementation, scans bytecode for mint/burn/pause entrypoints
+  and the auth model (Ownable vs AccessControl), reads `owner()` and classifies
+  it (renounced / single EOA / contract), and exits non-zero when an inflatable
+  supply sits under a single EOA. Pure logic in `mint-authority-core.ts` is
+  unit-tested offline.
+- **`upgradeability --json`**: the command now has machine-readable output, so
+  it drops into CI like the others.
+- **RPC resilience**: every on-chain read goes through a request timeout
+  (`EVMSEC_RPC_TIMEOUT_MS`) and bounded exponential-backoff retry on transient
+  errors only (`EVMSEC_RPC_RETRIES`); real errors still surface immediately.
 - **Tooling**: ESLint (flat config, type-aware) and Prettier, wired into a
   single `npm run check` gate (format → lint → typecheck → test).
 - **Build/packaging**: a real compiled build (`tsc` → `dist/`); the published
@@ -22,6 +34,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`solvency --all` runs routes with bounded concurrency** (`EVMSEC_CONCURRENCY`,
+  default 5) instead of strictly sequentially, and isolates per-route failures:
+  an unreadable route is reported as `ERROR` and fails the exit code without
+  aborting the scan or masking the other routes.
 - `tsx` moved from runtime `dependencies` to `devDependencies` — it is only
   needed for development now that the package ships compiled JavaScript.
 

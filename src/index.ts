@@ -3,12 +3,14 @@ import { solvency } from "./commands/solvency.js";
 import { upgradeability } from "./commands/upgradeability.js";
 import { settlement } from "./commands/settlement.js";
 import { pqReadiness } from "./commands/pq-readiness.js";
+import { mintAuthority } from "./commands/mint-authority.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   solvency,
   upgradeability,
   settlement,
   "pq-readiness": pqReadiness,
+  "mint-authority": mintAuthority,
 };
 
 const HELP = `evmsec — a security CLI for EVM chains
@@ -19,6 +21,8 @@ commands:
   solvency <route-id|--all>     is a lock-and-mint bridge fully backed?
                                   (locked collateral ≥ wrapped supply minted)
   upgradeability <address>      EIP-1967 proxy check: upgradeable? who controls it?
+  mint-authority <token>        can the wrapped supply be inflated, and by whom?
+                                  (mint entrypoints + owner: renounced/EOA/contract)
   settlement                    did an ERC-7683 cross-chain intent actually get
                                   filled? (--source-chain --intent-tx --fill-tx)
   pq-readiness <address>        is this verifier post-quantum ready, or
@@ -43,6 +47,7 @@ examples:
   evmsec solvency --lock-chain ethereum --escrow 0xEsc --token 0xUSDC \\
                   --mint-chain polygon --minted 0xWrapped --json
   evmsec upgradeability 0xToken --chain base
+  evmsec mint-authority 0xWrappedToken --chain polygon --json
   evmsec settlement --source-chain ethereum --intent-tx 0xOpen \\
                     --fill-tx 0xFill
   evmsec pq-readiness 0xVerifier --chain ethereum --json

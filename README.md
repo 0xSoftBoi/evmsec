@@ -97,7 +97,36 @@ npm run evmsec -- upgradeability 0xToken --chain base
 
 Reads EIP-1967 slots: is it an upgradeable proxy, what's the implementation, and
 is the upgrade admin a single EOA (one key from a rug) or a contract
-(multisig/timelock)?
+(multisig/timelock)? Add `--json` to drop it into CI.
+
+### `mint-authority` — can the wrapped supply be inflated, and by whom?
+
+`solvency` says a bridge is backed _now_. But a token can read 100% backed today
+and still carry an open mint function — a future money printer one key away from
+use. This asks the next question every auditor asks: **who, if anyone, can
+inflate the supply?**
+
+```bash
+npm run evmsec -- mint-authority 0xWrappedToken --chain polygon [--json]
+```
+
+It follows the proxy to its implementation (most bridge tokens are proxies),
+scans the bytecode for mint/burn/pause entrypoints and the auth model (Ownable
+vs OpenZeppelin AccessControl), then reads `owner()` on-chain and classifies it:
+**renounced**, a single **EOA** (one-key inflation risk), or a **contract**
+(multisig/timelock — inspect it). **Exit code is non-zero when an inflatable
+supply sits under a single EOA**, so it drops into CI alongside `solvency`:
+
+```bash
+evmsec mint-authority 0xWrappedToken || alert "wrapped token mint is single-key controlled"
+```
+
+Honestly scoped like the others: this is a bytecode + `owner()` heuristic, not a
+proof. Role members (e.g. `MINTER_ROLE` holders) can't be enumerated from
+bytecode, and some tokens route minting through a separate `masterMinter` rather
+than `owner()` — so it flags and explains, and tells you to confirm the gating
+against source. The detection logic (`mint-authority-core.ts`) is unit-tested
+offline.
 
 ### `settlement` — did the cross-chain intent actually get filled?
 
@@ -164,25 +193,37 @@ triage → resolve proxies → confirm from source → score → remediate — a
 `ethereum · base · arbitrum · optimism · polygon · sepolia · base-sepolia`
 — override any RPC via env (`ETHEREUM_RPC_URL`, `BASE_RPC_URL`, …).
 
+## Reliability
+
+Public RPCs are flaky, and a security check that aborts on a transient blip is
+worse than useless in a cron. Every on-chain read goes through a per-request
+timeout (`EVMSEC_RPC_TIMEOUT_MS`, default 20s) and bounded exponential-backoff
+retry on transient errors only — timeouts, 429s, 5xx, resets — while real errors
+(reverts, bad input) surface immediately (`EVMSEC_RPC_RETRIES`, default 3).
+`solvency --all` checks routes with bounded concurrency (`EVMSEC_CONCURRENCY`,
+default 5) and isolates per-route failures: one unreadable route is reported as
+`ERROR` and fails the exit code, without masking the others.
+
 ## Layout
 
 ```
 src/
-  config.ts                chains, RPCs
-  lib.ts                   provider cache, ABIs (ERC-20 / ERC-7683), proxy slots, math, bisection
-  lib.test.ts              unit tests for the pure logic (no network)
-  settlement-core.ts       pure ERC-7683 delivery-matching + verdict logic
-  pq-core.ts               pure post-quantum scheme classification (bytecode → verdict)
-  pq-core.test.ts          unit tests for the PQ classifier (no network)
-  settlement-core.test.ts  unit tests for settlement logic (no network)
-  bridges.ts               route registry loader
+  config.ts                  chains, RPCs
+  lib.ts                     provider cache + RPC retry/concurrency, ABIs, proxy slots, math, bisection
+  lib.test.ts                unit tests for the pure logic (no network)
+  settlement-core.ts         pure ERC-7683 delivery-matching + verdict logic
+  pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
+  mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
+  *-core.test.ts             unit tests for the pure cores (no network)
+  bridges.ts                 route registry loader
   commands/
-    solvency.ts            flagship: lock-vs-mint backing check
-    upgradeability.ts      EIP-1967 / legacy proxy admin risk
-    settlement.ts          ERC-7683 cross-chain intent fill verification
-    pq-readiness.ts        post-quantum readiness of a verifier (Shor-breakable?)
-  index.ts                 CLI dispatcher
-bridges.json               route registry (verify before trusting)
+    solvency.ts              flagship: lock-vs-mint backing check
+    upgradeability.ts        EIP-1967 / legacy proxy admin risk
+    mint-authority.ts        who can inflate the wrapped supply?
+    settlement.ts            ERC-7683 cross-chain intent fill verification
+    pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)
+  index.ts                   CLI dispatcher
+bridges.json                 route registry (verify before trusting)
 ```
 
 ## Development
@@ -203,8 +244,9 @@ npm run test:coverage # the same, with V8 coverage
 npm run build         # compile to dist/ (what `prepublishOnly` ships)
 ```
 
-The backing math, the forensic bisection, the proxy-slot parsing, the PQ
-classifier, and the settlement matcher are unit-tested and run offline. Test
+The backing math, the forensic bisection, the proxy-slot parsing, the PQ and
+mint-authority classifiers, the RPC retry/concurrency helpers, and the
+settlement matcher are unit-tested and run offline. Test
 discovery is explicit (`scripts/run-tests.mjs`) so it behaves identically across
 shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
 typecheck, and build once, plus the test suite on Node 20 and 22, for every push
@@ -215,7 +257,6 @@ and PR.
 See [ROADMAP.md](./ROADMAP.md) for the full, scoped plan (each item is grounded
 in prior art with an approach + acceptance criteria, and has a tracking issue):
 
-- `mint-authority <token>` — who can mint; is ownership renounced?
 - `solvency --watch` — alert the moment backing breaks
 - multi-asset bridges (sum escrows across many tokens)
 - a CI-validated, community-verified `bridges.json` registry
