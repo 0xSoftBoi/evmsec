@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 import { solvency } from "./commands/solvency.js";
 import { upgradeability } from "./commands/upgradeability.js";
 import { settlement } from "./commands/settlement.js";

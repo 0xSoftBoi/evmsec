@@ -46,9 +46,7 @@ export function findRoute(id: string): Route {
   const routes = loadRoutes();
   const hit = routes.find((r) => r.id === id);
   if (!hit) {
-    throw new Error(
-      `unknown route "${id}". Known: ${routes.map((r) => r.id).join(", ") || "(none)"}`,
-    );
+    throw new Error(`unknown route "${id}". Known: ${routes.map((r) => r.id).join(", ") || "(none)"}`);
   }
   return hit;
 }

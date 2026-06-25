@@ -69,9 +69,7 @@ function print(chainName: string, target: string, link: string, v: SchemeVerdict
   console.log(`  ${link}`);
   console.log(`\n  indicators`);
   for (const ind of v.indicators) console.log(`    • ${ind}`);
-  console.log(
-    `\n  Heuristic from bytecode — not a proof. ECDSA/BLS rest on elliptic-curve`,
-  );
+  console.log(`\n  Heuristic from bytecode — not a proof. ECDSA/BLS rest on elliptic-curve`);
   console.log(`  discrete log, forgeable once Shor-capable quantum computers exist.`);
   console.log(`  Verify against the verifier's source before acting.\n`);
 }

@@ -9,13 +9,16 @@
     "type": "git",
     "url": "https://github.com/0xSoftBoi/evmsec.git"
   },
+  "bugs": {
+    "url": "https://github.com/0xSoftBoi/evmsec/issues"
+  },
+  "homepage": "https://github.com/0xSoftBoi/evmsec#readme",
   "bin": {
-    "evmsec": "src/index.ts"
+    "evmsec": "dist/index.js"
   },
   "files": [
-    "src",
+    "dist",
     "bridges.json",
-    "tsconfig.json",
     "README.md",
     "LICENSE"
   ],
@@ -24,8 +27,17 @@
   },
   "scripts": {
     "evmsec": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/**/*.test.ts"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"*.{json,md}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.{json,md}\"",
+    "test": "node scripts/run-tests.mjs",
+    "test:coverage": "node scripts/run-tests.mjs --experimental-test-coverage",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "ethereum",
@@ -39,11 +51,16 @@
   ],
   "dependencies": {
     "dotenv": "^16.4.7",
-    "ethers": "^6.13.5",
-    "tsx": "^4.19.2"
+    "ethers": "^6.13.5"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.2"
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.2",
+    "prettier": "^3.8.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.62.0"
   }
 }

@@ -1,0 +1,25 @@
+name: Feature request / new check
+description: Propose a new security check or an enhancement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What security question would this answer?
+      description: |
+        evmsec checks are framed around a concrete on-chain risk (e.g. "is this
+        bridge backed?"). What risk would this surface?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: How might it work — which reads/events/slots/precompiles? Prior art is welcome.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Honest scope / limitations
+      description: |
+        Where would it be a heuristic vs. a proof? evmsec values honestly-scoped
+        checks over false confidence.

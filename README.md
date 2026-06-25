@@ -63,11 +63,11 @@ non-zero when undercollateralized**, so it drops straight into CI or a cron:
 ```
 
 Define your own verified routes in `bridges.json` (or point `EVMSEC_BRIDGES` at
-your file). ⚠️ The bundled entries are *illustrative* — verify every address
+your file). ⚠️ The bundled entries are _illustrative_ — verify every address
 against the bridge's own source before trusting a number. A security tool fed
 the wrong escrow lies confidently.
 
-#### `solvency --since` — *when* did backing break? (forensic)
+#### `solvency --since` — _when_ did backing break? (forensic)
 
 After a hack, the question is "when did the bridge first go insolvent?"
 `--since` binary-searches block history to pin the exact destination-chain block
@@ -102,7 +102,7 @@ is the upgrade admin a single EOA (one key from a rug) or a contract
 ### `settlement` — did the cross-chain intent actually get filled?
 
 For [ERC-7683](https://eips.ethereum.org/EIPS/eip-7683) intents: decode the
-`Open` event on the source chain to learn what the filler *promised* to deliver
+`Open` event on the source chain to learn what the filler _promised_ to deliver
 (`maxSpent`), then check the destination `fill` tx really delivered that token
 and amount to the intended recipient, before the `fillDeadline`, and final.
 
@@ -122,7 +122,7 @@ intent. **v1 limits:** ERC-7683 only (Across/CoW/UniswapX have their own
 formats); it verifies ERC-20 deliveries via Transfer logs (native-token outputs
 are flagged, not proven); it does **not** cryptographically verify cross-chain
 message proofs; and you supply the `--fill-tx` (auto-discovery needs an indexer
-— roadmap). Treat it as a settlement *audit helper*, not an oracle of truth.
+— roadmap). Treat it as a settlement _audit helper_, not an oracle of truth.
 
 ### `pq-readiness` — is this verifier quantum-safe, or printing forgeries later?
 
@@ -189,13 +189,26 @@ bridges.json               route registry (verify before trusting)
 
 ```bash
 npm install
-npm run typecheck     # strict tsc
-npm test              # node:test via tsx — pure logic, no network
+npm run check         # format + lint + typecheck + tests, in one gate
 ```
 
-The backing math, the forensic bisection, and the proxy-slot parsing are
-unit-tested and run offline; CI (`.github/workflows/ci.yml`) runs typecheck +
-tests on Node 20 and 22 for every push and PR.
+Individual steps:
+
+```bash
+npm run format        # Prettier (write)   ·  npm run format:check in CI
+npm run lint          # ESLint              ·  npm run lint:fix to autofix
+npm run typecheck     # strict tsc, no emit
+npm test              # node:test via tsx — pure logic, no network
+npm run test:coverage # the same, with V8 coverage
+npm run build         # compile to dist/ (what `prepublishOnly` ships)
+```
+
+The backing math, the forensic bisection, the proxy-slot parsing, the PQ
+classifier, and the settlement matcher are unit-tested and run offline. Test
+discovery is explicit (`scripts/run-tests.mjs`) so it behaves identically across
+shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
+typecheck, and build once, plus the test suite on Node 20 and 22, for every push
+and PR.
 
 ## Roadmap
 

@@ -40,11 +40,7 @@ test("isUnderBacked: threshold comparisons", () => {
 
 test("firstBreachBlock pins the exact boundary in ~log2 probes", async () => {
   for (const B of [1, 2, 5, 100, 999, 1_000_000, 25_342_801]) {
-    const { lastHealthy, firstBroken, probes } = await firstBreachBlock(
-      0,
-      25_342_815,
-      async (n) => n >= B,
-    );
+    const { lastHealthy, firstBroken, probes } = await firstBreachBlock(0, 25_342_815, async (n) => n >= B);
     assert.equal(firstBroken, B, `firstBroken for B=${B}`);
     assert.equal(lastHealthy, B - 1, `lastHealthy for B=${B}`);
     assert.ok(probes <= 26, `probes ${probes} should be ~log2(range)`);

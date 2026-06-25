@@ -35,7 +35,13 @@ export async function settlement(args: string[]): Promise<void> {
 
   const outputs: ExpectedOutput[] = order.maxSpent.map((x) => {
     const token = bytes32ToAddress(x.token);
-    return { token, amount: x.amount, recipient: bytes32ToAddress(x.recipient), chainId: Number(x.chainId), native: isNativeToken(token) };
+    return {
+      token,
+      amount: x.amount,
+      recipient: bytes32ToAddress(x.recipient),
+      chainId: Number(x.chainId),
+      native: isNativeToken(token),
+    };
   });
   if (outputs.length === 0) throw new Error("intent has no maxSpent outputs to verify");
 
@@ -60,7 +66,15 @@ export async function settlement(args: string[]): Promise<void> {
   const results = [];
   for (const out of onDest) {
     if (out.native) {
-      results.push({ out, native: true, verdict: { status: "anomaly" as const, anomalies: [], warnings: ["native-token output — not verifiable from ERC-20 logs in v1; inspect the fill tx manually"] } });
+      results.push({
+        out,
+        native: true,
+        verdict: {
+          status: "anomaly" as const,
+          anomalies: [],
+          warnings: ["native-token output — not verifiable from ERC-20 logs in v1; inspect the fill tx manually"],
+        },
+      });
       continue;
     }
     const check = matchDelivery(out, transfers);
@@ -70,26 +84,32 @@ export async function settlement(args: string[]): Promise<void> {
   }
 
   if (o.json) {
-    console.log(JSON.stringify({
-      orderId: order.orderId,
-      user: order.user,
-      sourceChain: src.name,
-      destChain: destChain.name,
-      fillTx: o.fillTx,
-      fillBlock,
-      fillDeadline,
-      deadlineMet,
-      finalized,
-      outputs: results.map((r) => ({
-        token: r.out.token,
-        recipient: r.out.recipient,
-        expected: r.out.amount.toString(),
-        delivered: r.native ? null : r.check?.deliveredValue.toString(),
-        status: r.verdict.status,
-        anomalies: r.verdict.anomalies,
-        warnings: r.verdict.warnings,
-      })),
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          orderId: order.orderId,
+          user: order.user,
+          sourceChain: src.name,
+          destChain: destChain.name,
+          fillTx: o.fillTx,
+          fillBlock,
+          fillDeadline,
+          deadlineMet,
+          finalized,
+          outputs: results.map((r) => ({
+            token: r.out.token,
+            recipient: r.out.recipient,
+            expected: r.out.amount.toString(),
+            delivered: r.native ? null : r.check?.deliveredValue.toString(),
+            status: r.verdict.status,
+            anomalies: r.verdict.anomalies,
+            warnings: r.verdict.warnings,
+          })),
+        },
+        null,
+        2,
+      ),
+    );
   } else {
     render(src, destChain, order, o.fillTx, fillBlock, fillTs, fillDeadline, results);
   }
@@ -99,14 +119,26 @@ export async function settlement(args: string[]): Promise<void> {
 
   const otherChains = [...new Set(outputs.filter((x) => x.chainId !== destChain.chainId).map((x) => x.chainId))];
   if (otherChains.length && !o.json) {
-    console.log(`note: intent also has outputs on chainId(s) ${otherChains.join(", ")} — re-run with their --fill-tx / --dest-chain to verify those.\n`);
+    console.log(
+      `note: intent also has outputs on chainId(s) ${otherChains.join(", ")} — re-run with their --fill-tx / --dest-chain to verify those.\n`,
+    );
   }
 }
 
 // ── decoding ────────────────────────────────────────────────────────────────
 
-interface RawOutput { token: string; amount: bigint; recipient: string; chainId: bigint; }
-interface OpenOrder { orderId: string; user: string; fillDeadline: bigint; maxSpent: RawOutput[]; }
+interface RawOutput {
+  token: string;
+  amount: bigint;
+  recipient: string;
+  chainId: bigint;
+}
+interface OpenOrder {
+  orderId: string;
+  user: string;
+  fillDeadline: bigint;
+  maxSpent: RawOutput[];
+}
 
 async function decodeOpen(src: ChainConfig, intentTx: string): Promise<OpenOrder> {
   const receipt = await getProvider(src).getTransactionReceipt(intentTx);
@@ -118,20 +150,33 @@ async function decodeOpen(src: ChainConfig, intentTx: string): Promise<OpenOrder
     const parsed = erc7683Interface.parseLog({ topics: [...log.topics], data: log.data });
     if (!parsed) continue;
     const ro = parsed.args.resolvedOrder;
-    const maxSpent: RawOutput[] = ro.maxSpent.map((x: { token: string; amount: bigint; recipient: string; chainId: bigint }) => ({
-      token: x.token, amount: x.amount, recipient: x.recipient, chainId: x.chainId,
-    }));
-    return { orderId: parsed.args.orderId as string, user: ro.user as string, fillDeadline: ro.fillDeadline as bigint, maxSpent };
+    const maxSpent: RawOutput[] = ro.maxSpent.map(
+      (x: { token: string; amount: bigint; recipient: string; chainId: bigint }) => ({
+        token: x.token,
+        amount: x.amount,
+        recipient: x.recipient,
+        chainId: x.chainId,
+      }),
+    );
+    return {
+      orderId: parsed.args.orderId as string,
+      user: ro.user as string,
+      fillDeadline: ro.fillDeadline as bigint,
+      maxSpent,
+    };
   }
   throw new Error(`no ERC-7683 Open event in ${intentTx} on ${src.name} — is this the order-opening tx?`);
 }
 
-function decodeTransfers(logs: readonly { address: string; topics: readonly string[]; data: string }[]): ObservedTransfer[] {
+function decodeTransfers(
+  logs: readonly { address: string; topics: readonly string[]; data: string }[],
+): ObservedTransfer[] {
   const out: ObservedTransfer[] = [];
   for (const log of logs) {
     try {
       const p = erc20Interface.parseLog({ topics: [...log.topics], data: log.data });
-      if (p?.name === "Transfer") out.push({ token: log.address, to: p.args.to as string, value: p.args.value as bigint });
+      if (p?.name === "Transfer")
+        out.push({ token: log.address, to: p.args.to as string, value: p.args.value as bigint });
     } catch {
       // not an ERC-20 Transfer — skip
     }
@@ -144,10 +189,13 @@ function resolveDestChain(destChainKey: string | undefined, outputs: ExpectedOut
   const ids = [...new Set(outputs.map((x) => x.chainId))];
   if (ids.length === 1) {
     const c = chainById(ids[0]);
-    if (!c) throw new Error(`destination chainId ${ids[0]} is not configured — add it to src/config.ts or pass --dest-chain`);
+    if (!c)
+      throw new Error(`destination chainId ${ids[0]} is not configured — add it to src/config.ts or pass --dest-chain`);
     return c;
   }
-  throw new Error(`intent spans destination chainIds ${ids.join(", ")} — pass --dest-chain to pick which the fill tx is on`);
+  throw new Error(
+    `intent spans destination chainIds ${ids.join(", ")} — pass --dest-chain to pick which the fill tx is on`,
+  );
 }
 
 async function tokenDecimals(c: ChainConfig, token: string, cache: Map<string, number>): Promise<number> {
@@ -189,13 +237,17 @@ function render(
   console.log(`  user        ${order.user}`);
   console.log(`  route       ${src.name} → ${dest.name}`);
   console.log(`  fill tx     ${fillTx}  (block ${fillBlock})`);
-  console.log(`  deadline    fill ${new Date(fillTs * 1000).toISOString()}  vs  ${new Date(fillDeadline * 1000).toISOString()}  ${fillTs <= fillDeadline ? "✓" : "✗ LATE"}`);
+  console.log(
+    `  deadline    fill ${new Date(fillTs * 1000).toISOString()}  vs  ${new Date(fillDeadline * 1000).toISOString()}  ${fillTs <= fillDeadline ? "✓" : "✗ LATE"}`,
+  );
 
   for (const r of results) {
     const mark = r.verdict.status === "settled" ? "✓" : r.verdict.status === "anomaly" ? "⚠" : "✗";
     const tokenLabel = r.native ? "native" : shortAddr(r.out.token);
     const fmt = (v: bigint) => (r.dec !== undefined ? formatUnits(v, r.dec) : v.toString());
-    console.log(`\n  ${mark} output → ${shortAddr(r.out.recipient)}  (${tokenLabel})  [${r.verdict.status.toUpperCase()}]`);
+    console.log(
+      `\n  ${mark} output → ${shortAddr(r.out.recipient)}  (${tokenLabel})  [${r.verdict.status.toUpperCase()}]`,
+    );
     console.log(`     expected ${fmt(r.out.amount)}`);
     if (r.check) console.log(`     delivered ${fmt(r.check.deliveredValue)}`);
     for (const a of r.verdict.anomalies) console.log(`     ⚠ ${a}`);
@@ -219,12 +271,24 @@ function parse(args: string[]): Opts {
   const o: Opts = { finalityDepth: 12, json: false };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case "--source-chain": o.sourceChain = args[++i]; break;
-      case "--dest-chain": o.destChain = args[++i]; break;
-      case "--intent-tx": o.intentTx = args[++i]; break;
-      case "--fill-tx": o.fillTx = args[++i]; break;
-      case "--finality-depth": o.finalityDepth = Number(args[++i]); break;
-      case "--json": o.json = true; break;
+      case "--source-chain":
+        o.sourceChain = args[++i];
+        break;
+      case "--dest-chain":
+        o.destChain = args[++i];
+        break;
+      case "--intent-tx":
+        o.intentTx = args[++i];
+        break;
+      case "--fill-tx":
+        o.fillTx = args[++i];
+        break;
+      case "--finality-depth":
+        o.finalityDepth = Number(args[++i]);
+        break;
+      case "--json":
+        o.json = true;
+        break;
     }
   }
   return o;

@@ -7,14 +7,16 @@ the registry, and **new security checks**.
 
 ```bash
 npm install
-npm run typecheck
-npm test
+npm run check          # format + lint + typecheck + tests — must pass before a PR
 npm run evmsec -- help
 ```
 
-Tests use Node's built-in runner via `tsx --test`. Pure logic (backing math,
-the forensic bisection, slot parsing) is unit-tested in `src/*.test.ts` and runs
-with no network. Add tests for any logic you add.
+Run `npm run format` to auto-fix formatting and `npm run lint:fix` for
+autofixable lint issues. Tests use Node's built-in runner via `tsx`, discovered
+explicitly by `scripts/run-tests.mjs` (so the suite behaves the same across
+shells and Node 20/22). Pure logic (backing math, the forensic bisection, slot
+parsing, PQ classification, settlement matching) is unit-tested in
+`src/*.test.ts` and runs with no network. **Add tests for any logic you add.**
 
 ## Adding a bridge route to the registry
 
@@ -36,7 +38,7 @@ Add an entry under `"routes"`:
   "bridge": "Human Bridge Name",
   "asset": "USDC",
   "lock": { "chain": "ethereum", "escrow": "0x…", "token": "0x…" },
-  "mint": { "chain": "polygon",  "token": "0x…" },
+  "mint": { "chain": "polygon", "token": "0x…" },
   "notes": "Primary source: <link to the bridge's own deployment docs / verified contract>"
 }
 ```
@@ -59,6 +61,11 @@ Open an issue first if it's a large addition.
 
 ## Conventions
 
-- ethers v6, ESM, strict TypeScript — `npm run typecheck` must pass.
+- ethers v6, ESM, strict TypeScript — `npm run check` must pass.
+- Formatting is owned by Prettier and linting by ESLint; don't hand-fight them.
 - Prefer `bigint` for on-chain amounts; only convert to `Number` for display.
 - No silent failures in a security tool: if state can't be read, say so.
+- Keep new checks honestly scoped — a heuristic is fine, a false "safe" is not.
+
+By participating you agree to abide by our [Code of Conduct](./CODE_OF_CONDUCT.md).
+Security issues should be reported privately — see [SECURITY.md](./SECURITY.md).

@@ -195,7 +195,14 @@ async function bisect(route: Route, since: string, minRatio: number, json: boole
   }
 
   if (isBreach(startM, minRatio)) {
-    if (json) console.log(JSON.stringify({ result: "already-breached-at-start", route: route.id, startBlock: start, ...fmt(ctx, startM) }, null, 2));
+    if (json)
+      console.log(
+        JSON.stringify(
+          { result: "already-breached-at-start", route: route.id, startBlock: start, ...fmt(ctx, startM) },
+          null,
+          2,
+        ),
+      );
     else {
       console.log(`\n⚠ Already undercollateralized at --since block ${start} (${iso(startM.ts)}).`);
       console.log(`  backing ${ratio(startM)} — move --since earlier to find the true onset.\n`);
@@ -204,7 +211,10 @@ async function bisect(route: Route, since: string, minRatio: number, json: boole
     return;
   }
   if (!isBreach(headM, minRatio)) {
-    if (json) console.log(JSON.stringify({ result: "healthy", route: route.id, window: [start, latest], ...fmt(ctx, headM) }, null, 2));
+    if (json)
+      console.log(
+        JSON.stringify({ result: "healthy", route: route.id, window: [start, latest], ...fmt(ctx, headM) }, null, 2),
+      );
     else {
       console.log(`\n✓ Backing held ≥ ${minRatio}% across the whole window [${start}, ${latest}].`);
       console.log(`  current backing ${ratio(headM)}. No breach to locate.\n`);
@@ -213,28 +223,34 @@ async function bisect(route: Route, since: string, minRatio: number, json: boole
   }
 
   // Invariant: healthy at `start`, breached at head. Converge to the boundary.
-  const { lastHealthy: lo, firstBroken: hi, probes } = await firstBreachBlock(
-    start,
-    latest,
-    async (n) => {
-      const m = await measure(ctx, n);
-      return isUnderBacked(m.locked18, m.minted18, minRatio);
-    },
-  );
+  const {
+    lastHealthy: lo,
+    firstBroken: hi,
+    probes,
+  } = await firstBreachBlock(start, latest, async (n) => {
+    const m = await measure(ctx, n);
+    return isUnderBacked(m.locked18, m.minted18, minRatio);
+  });
 
   const lastHealthy = await measure(ctx, lo);
   const firstBroken = await measure(ctx, hi);
   const culprits = await mintTransfersIn(ctx, hi);
 
   if (json) {
-    console.log(JSON.stringify({
-      result: "breach-located",
-      route: route.id,
-      probes,
-      lastHealthy: { block: lo, ts: lastHealthy.ts, ...fmt(ctx, lastHealthy) },
-      firstBroken: { block: hi, ts: firstBroken.ts, ...fmt(ctx, firstBroken) },
-      candidateTxs: culprits,
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          result: "breach-located",
+          route: route.id,
+          probes,
+          lastHealthy: { block: lo, ts: lastHealthy.ts, ...fmt(ctx, lastHealthy) },
+          firstBroken: { block: hi, ts: firstBroken.ts, ...fmt(ctx, firstBroken) },
+          candidateTxs: culprits,
+        },
+        null,
+        2,
+      ),
+    );
     process.exitCode = 1;
     return;
   }
@@ -242,9 +258,13 @@ async function bisect(route: Route, since: string, minRatio: number, json: boole
   console.log(`\n🔎 Backing breach located for ${route.bridge} — ${route.asset} [${route.id}]`);
   console.log("─".repeat(68));
   console.log(`  last healthy   ${ctx.mintChain.name} block ${lo}  (${iso(lastHealthy.ts)})`);
-  console.log(`                 backing ${ratio(lastHealthy)}   locked ${fnum(ctx, lastHealthy.lockedRaw, "lock")}  minted ${fnum(ctx, lastHealthy.mintedRaw, "mint")}`);
+  console.log(
+    `                 backing ${ratio(lastHealthy)}   locked ${fnum(ctx, lastHealthy.lockedRaw, "lock")}  minted ${fnum(ctx, lastHealthy.mintedRaw, "mint")}`,
+  );
   console.log(`  first breached ${ctx.mintChain.name} block ${hi}  (${iso(firstBroken.ts)})`);
-  console.log(`                 backing ${ratio(firstBroken)}   locked ${fnum(ctx, firstBroken.lockedRaw, "lock")}  minted ${fnum(ctx, firstBroken.mintedRaw, "mint")}`);
+  console.log(
+    `                 backing ${ratio(firstBroken)}   locked ${fnum(ctx, firstBroken.lockedRaw, "lock")}  minted ${fnum(ctx, firstBroken.mintedRaw, "mint")}`,
+  );
   console.log(`  located in     ${probes} probes  ·  ${blockLink(ctx.mintChain, hi)}`);
   if (culprits.length) {
     console.log(`\n  candidate cause — mint-token transfers in block ${hi}:`);
@@ -273,7 +293,12 @@ async function mintTransfersIn(ctx: RouteCtx, block: number): Promise<Transfer[]
     return logs
       .map((l): Transfer => {
         const ev = l as unknown as { args: { from: string; to: string; value: bigint }; transactionHash: string };
-        return { from: ev.args.from, to: ev.args.to, amount: formatUnits(ev.args.value, ctx.mintDec), tx: ev.transactionHash };
+        return {
+          from: ev.args.from,
+          to: ev.args.to,
+          amount: formatUnits(ev.args.value, ctx.mintDec),
+          tx: ev.transactionHash,
+        };
       })
       .sort((a, b) => Number(b.from === ZERO) - Number(a.from === ZERO));
   } catch {
@@ -286,7 +311,8 @@ async function resolveSince(ctx: RouteCtx, since: string, latest: number): Promi
   const asNum = Number(since);
   if (Number.isInteger(asNum) && asNum > 0 && asNum <= latest) return asNum; // block number
   const ts = Number.isFinite(asNum) && asNum > 1_000_000_000 ? asNum : Math.floor(new Date(since).getTime() / 1000);
-  if (!Number.isFinite(ts) || ts <= 0) throw new Error(`could not parse --since "${since}" (use a block number, unix ts, or ISO date)`);
+  if (!Number.isFinite(ts) || ts <= 0)
+    throw new Error(`could not parse --since "${since}" (use a block number, unix ts, or ISO date)`);
   return blockAtOrBefore(getProvider(ctx.mintChain), ctx.mintChain.key, ts);
 }
 
@@ -311,15 +337,16 @@ function envName(key: string): string {
 
 function render(results: SolvencyResult[], minRatio: number): void {
   for (const r of results) {
-    const mark =
-      r.verdict === "BACKED" && (r.ratioPct ?? 0) >= minRatio ? "✓" : r.verdict === "NO_SUPPLY" ? "·" : "✗";
+    const mark = r.verdict === "BACKED" && (r.ratioPct ?? 0) >= minRatio ? "✓" : r.verdict === "NO_SUPPLY" ? "·" : "✗";
     const ratioStr = r.ratioPct === null ? "n/a" : `${r.ratioPct.toFixed(2)}%`;
     console.log(`\n${mark} ${r.bridge} — ${r.asset}  [${r.id}]`);
     console.log("─".repeat(64));
     console.log(`  locked   ${r.locked}  (${r.lockChain})`);
     console.log(`  minted   ${r.minted}  (${r.mintChain})`);
     console.log(`  backing  ${ratioStr}    delta ${r.delta}`);
-    console.log(`  verdict  ${r.verdict}${r.verdict === "UNDERCOLLATERALIZED" ? "  ⚠ bridge is printing unbacked supply" : ""}`);
+    console.log(
+      `  verdict  ${r.verdict}${r.verdict === "UNDERCOLLATERALIZED" ? "  ⚠ bridge is printing unbacked supply" : ""}`,
+    );
   }
   console.log();
 }
@@ -342,15 +369,33 @@ function parse(args: string[]): Opts {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     switch (a) {
-      case "--all": opts.all = true; break;
-      case "--json": opts.json = true; break;
-      case "--min-ratio": opts.minRatio = Number(args[++i]); break;
-      case "--since": opts.since = args[++i]; break;
-      case "--lock-chain": adHoc.lockChain = args[++i]; break;
-      case "--escrow": adHoc.escrow = args[++i]; break;
-      case "--token": adHoc.token = args[++i]; break;
-      case "--mint-chain": adHoc.mintChain = args[++i]; break;
-      case "--minted": adHoc.minted = args[++i]; break;
+      case "--all":
+        opts.all = true;
+        break;
+      case "--json":
+        opts.json = true;
+        break;
+      case "--min-ratio":
+        opts.minRatio = Number(args[++i]);
+        break;
+      case "--since":
+        opts.since = args[++i];
+        break;
+      case "--lock-chain":
+        adHoc.lockChain = args[++i];
+        break;
+      case "--escrow":
+        adHoc.escrow = args[++i];
+        break;
+      case "--token":
+        adHoc.token = args[++i];
+        break;
+      case "--mint-chain":
+        adHoc.mintChain = args[++i];
+        break;
+      case "--minted":
+        adHoc.minted = args[++i];
+        break;
       default:
         if (!a.startsWith("-") && !opts.id) opts.id = a;
     }
@@ -358,7 +403,8 @@ function parse(args: string[]): Opts {
 
   if (adHoc.lockChain || adHoc.escrow || adHoc.token || adHoc.mintChain || adHoc.minted) {
     const missing = (["lockChain", "escrow", "token", "mintChain", "minted"] as const).filter((k) => !adHoc[k]);
-    if (missing.length) throw new Error(`ad-hoc route missing: ${missing.map((m) => "--" + m.replace("Chain", "-chain")).join(", ")}`);
+    if (missing.length)
+      throw new Error(`ad-hoc route missing: ${missing.map((m) => "--" + m.replace("Chain", "-chain")).join(", ")}`);
     opts.adHoc = {
       id: "ad-hoc",
       bridge: "ad-hoc route",

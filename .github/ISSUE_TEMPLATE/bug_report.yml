@@ -1,0 +1,44 @@
+name: Bug report
+description: Something the tool got wrong or that crashed
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. If this is a **security vulnerability** or a
+        mis-attributed registry address, please use private reporting instead —
+        see [SECURITY.md](../../blob/master/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did the tool do instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Command to reproduce
+      description: The exact `evmsec` command (redact private RPC URLs / keys).
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: chain
+    attributes:
+      label: Chain / address (if relevant)
+      description: e.g. `ethereum`, target address — so we can reproduce on-chain reads.
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse --short HEAD` or the released version.
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node --version`.
+    validations:
+      required: true

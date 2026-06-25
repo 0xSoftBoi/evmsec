@@ -73,9 +73,7 @@ export function addressFromSlot(word: string): string | null {
 /** Scale a raw integer with `decimals` up/down to a common 18-decimal fixed point. */
 export function to18(raw: bigint, decimals: number): bigint {
   if (decimals === 18) return raw;
-  return decimals < 18
-    ? raw * 10n ** BigInt(18 - decimals)
-    : raw / 10n ** BigInt(decimals - 18);
+  return decimals < 18 ? raw * 10n ** BigInt(18 - decimals) : raw / 10n ** BigInt(decimals - 18);
 }
 
 /** Backing ratio in percent (locked/minted), or null when nothing is minted. */
@@ -147,11 +145,7 @@ export async function getBlockCached(provider: JsonRpcProvider, chainKey: string
  * Used to align the source chain to a destination-chain block's wall-clock time
  * when checking a cross-chain invariant historically.
  */
-export async function blockAtOrBefore(
-  provider: JsonRpcProvider,
-  chainKey: string,
-  targetTs: number,
-): Promise<number> {
+export async function blockAtOrBefore(provider: JsonRpcProvider, chainKey: string, targetTs: number): Promise<number> {
   const latest = await provider.getBlockNumber();
   const head = await getBlockCached(provider, chainKey, latest);
   if (head.timestamp <= targetTs) return latest;
