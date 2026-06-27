@@ -43,6 +43,17 @@ Add an entry under `"routes"`:
 }
 ```
 
+For a **multi-asset / multi-escrow** bridge, `lock` may instead be an array of
+legs — they're summed (normalized to 18 dp) against the minted supply. The legs
+must denominate the same unit as the minted token:
+
+```json
+"lock": [
+  { "chain": "ethereum", "escrow": "0x…", "token": "0x…" },
+  { "chain": "arbitrum", "escrow": "0x…", "token": "0x…" }
+]
+```
+
 Requirements for a route PR:
 
 1. **Cite a primary source** in `notes` for the escrow and both token addresses —

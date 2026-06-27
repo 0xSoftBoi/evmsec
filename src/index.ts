@@ -36,9 +36,13 @@ solvency flags:
   --all                         check every route in the registry
   --since <block|date>          forensic: binary-search history for the block
                                   where backing first broke (needs archive RPC)
+  --watch                       poll continuously; alert once per breach transition
+  --interval <sec>              --watch poll interval (default 60)
+  --webhook <url>               --watch: POST a JSON alert on each transition
   --min-ratio <pct>             alert threshold (default 100)
   --json                        machine-readable output (for CI / monitoring)
   ad-hoc:  --lock-chain <c> --escrow 0x.. --token 0x.. --mint-chain <c> --minted 0x..
+  (a route's lock may be an array of legs — multi-asset escrows are summed)
 
 global:
   --chain, -c <key>             ethereum, base, arbitrum, optimism, polygon, sepolia, base-sepolia

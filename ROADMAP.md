@@ -26,31 +26,22 @@ by `owner()`.
 A sibling check, **`pause-guardian <token>`**, also shipped: who can freeze
 transfers, is the token paused now, and is the pause key a single EOA.
 
-## 2. `solvency --watch` — alert the moment backing breaks **[M]**
+## 2. `solvency --watch` — alert the moment backing breaks ✅ **shipped**
 
-**Why.** Real-time bridge-backing monitoring exists only as managed platforms
-(Hexagate, Forta, OZ Defender) or heavy infra; a lightweight self-hosted poller
-is the open slot (confirmed by the gap audit).
+A lightweight self-hosted alternative to managed monitoring (Hexagate, Forta, OZ
+Defender). `evmsec solvency --all --watch --interval 60 [--webhook URL]` polls on
+an interval and fires **once per breach transition** (de-duped via
+`computeTransitions` in `solvency-core.ts`), recovering quietly; clean shutdown
+on SIGINT/SIGTERM. Still open: subscribe to escrow `Transfer` / supply-change
+events instead of polling, and a `--delta` degrade threshold.
 
-**Approach.** Poll on an interval (re-run `solvency` per route), or subscribe to
-escrow `Transfer` + supply changes; alert via exit code / stdout / webhook when a
-route drops below `--min-ratio` or degrades by `--delta`. De-dupe alerts.
+## 3. Multi-asset bridges — sum escrows across many tokens ✅ **shipped**
 
-**Acceptance.** `evmsec solvency --watch --interval 60 [--webhook URL]` runs a
-loop and fires once per breach transition; clean shutdown on SIGINT.
-
-## 3. Multi-asset bridges — sum escrows across many tokens **[M]**
-
-**Why.** Real bridges lock many assets in one (or several) escrows; today a
-route is one asset.
-
-**Approach.** Extend `Route` to accept arrays of `{escrow, token}` on the lock
-side and multiple wrapped tokens on the mint side; normalize and aggregate;
-report per-asset backing **and** an aggregate. Backward-compatible with the
-single-asset shape.
-
-**Acceptance.** A multi-asset route reports each asset's backing plus a total;
-existing single-asset routes are unaffected.
+A route's `lock` now accepts an **array of legs** (`{chain, escrow, token}`),
+summed — each normalized to 18 dp — against the minted supply (`sumLocked18` in
+`solvency-core.ts`). Backward-compatible: single-leg routes are unchanged. Legs
+must denominate the same unit as the minted token. Still open: differently-priced
+baskets (needs a price oracle) and multiple wrapped tokens on the mint side.
 
 ## 4. Community-verified `bridges.json` registry **[S]**
 

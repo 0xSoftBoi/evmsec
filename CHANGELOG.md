@@ -23,6 +23,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `owner()` or enumerated `PAUSER_ROLE` holders). Exits non-zero when a single
   EOA can freeze transfers. Pure logic in `pause-guardian-core.ts` is
   unit-tested.
+- **`solvency --watch`**: poll routes on an interval and alert once per breach
+  transition (`--interval`, optional `--webhook` JSON POST); steady state is
+  silent, clean shutdown on SIGINT/SIGTERM. Transition logic in
+  `solvency-core.ts` is unit-tested.
+- **Multi-asset / multi-escrow routes**: a route's `lock` may now be an array of
+  legs `{chain, escrow, token}`, summed (normalized to 18 dp) against the minted
+  supply. Backward-compatible with single-leg routes.
 - **`upgradeability --json`**: the command now has machine-readable output, so
   it drops into CI like the others.
 - **RPC resilience**: every on-chain read goes through a request timeout

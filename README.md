@@ -67,6 +67,33 @@ your file). ⚠️ The bundled entries are _illustrative_ — verify every addre
 against the bridge's own source before trusting a number. A security tool fed
 the wrong escrow lies confidently.
 
+**Multi-asset / multi-escrow routes.** A route's `lock` may be an **array of
+legs** (each `{ chain, escrow, token }`). The legs are summed — normalized to 18
+decimals — against the minted supply, so a bridge that spreads collateral across
+several escrows or chains is checked as one invariant. The legs must denominate
+the same unit as the minted token; summing differently-priced assets needs a
+price oracle and is deliberately out of scope.
+
+```jsonc
+"lock": [
+  { "chain": "ethereum", "escrow": "0xEsc1", "token": "0xUSDC" },
+  { "chain": "ethereum", "escrow": "0xEsc2", "token": "0xUSDC" }
+]
+```
+
+#### `solvency --watch` — alert the moment backing breaks
+
+Poll the routes on an interval and alert **once per breach transition** (a route
+going under, or recovering) — steady state is silent, so it won't spam. Optional
+`--webhook` POSTs a JSON alert; clean shutdown on Ctrl-C.
+
+```bash
+npm run evmsec -- solvency --all --watch --interval 60 --webhook https://hooks.example/bridge
+```
+
+A self-hosted alternative to managed monitoring: no infra, just a process (or a
+container) watching the invariant and paging you on the transition.
+
 #### `solvency --since` — _when_ did backing break? (forensic)
 
 After a hack, the question is "when did the bridge first go insolvent?"
@@ -233,6 +260,7 @@ src/
   config.ts                  chains, RPCs
   lib.ts                     provider cache + RPC retry/concurrency, ABIs, proxy slots, math, bisection
   lib.test.ts                unit tests for the pure logic (no network)
+  solvency-core.ts           pure backing summation, breach predicate, watch transitions
   settlement-core.ts         pure ERC-7683 delivery-matching + verdict logic
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
@@ -268,8 +296,9 @@ npm run test:coverage # the same, with V8 coverage
 npm run build         # compile to dist/ (what `prepublishOnly` ships)
 ```
 
-The backing math, the forensic bisection, the proxy-slot parsing, the PQ and
-mint-authority classifiers, the RPC retry/concurrency helpers, and the
+The backing math, the multi-asset summation, the forensic bisection, the
+`--watch` transition logic, the proxy-slot parsing, the PQ / mint-authority /
+pause-guardian classifiers, the RPC retry/concurrency helpers, and the
 settlement matcher are unit-tested and run offline. Test
 discovery is explicit (`scripts/run-tests.mjs`) so it behaves identically across
 shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
@@ -281,8 +310,6 @@ and PR.
 See [ROADMAP.md](./ROADMAP.md) for the full, scoped plan (each item is grounded
 in prior art with an approach + acceptance criteria, and has a tracking issue):
 
-- `solvency --watch` — alert the moment backing breaks
-- multi-asset bridges (sum escrows across many tokens)
 - a CI-validated, community-verified `bridges.json` registry
 - `settlement`: more intent formats (Across, CoW, UniswapX), fill-tx
   auto-discovery, cross-chain message-proof verification, `settlement diagnose`

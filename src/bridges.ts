@@ -3,13 +3,25 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { ChainKey } from "./config.js";
 
+/** One locked leg: a token held in an escrow on some chain. */
+export interface LockLeg {
+  chain: ChainKey;
+  escrow: string;
+  token: string;
+}
+
 /**
  * A lock-and-mint route. The invariant a solvent bridge must hold:
  *
- *   balanceOf(lock.token @ lock.escrow)  >=  totalSupply(mint.token)
+ *   Σ balanceOf(leg.token @ leg.escrow)  >=  totalSupply(mint.token)
  *
  * i.e. every wrapped unit minted on the destination chain is backed by a real
- * unit locked in escrow on the source chain. A deficit is the money printer.
+ * unit locked in escrow on the source chain(s). A deficit is the money printer.
+ *
+ * `lock` is a single leg or an array of legs — the multi-asset / multi-escrow
+ * case sums them (each normalized to 18 dp). The legs must denominate the **same
+ * unit** as the minted token; summing differently-priced assets needs an oracle
+ * and is deliberately out of scope.
  */
 export interface Route {
   /** stable id, e.g. "polygon-pos-usdc" */
@@ -18,9 +30,14 @@ export interface Route {
   bridge: string;
   /** asset label, e.g. "USDC" */
   asset: string;
-  lock: { chain: ChainKey; escrow: string; token: string };
+  lock: LockLeg | LockLeg[];
   mint: { chain: ChainKey; token: string };
   notes?: string;
+}
+
+/** Normalize a route's `lock` to an array of legs (single-leg stays one entry). */
+export function lockLegs(route: Route): LockLeg[] {
+  return Array.isArray(route.lock) ? route.lock : [route.lock];
 }
 
 const here = dirname(fileURLToPath(import.meta.url));

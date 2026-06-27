@@ -15,7 +15,8 @@ import {
   to18,
   withRetry,
 } from "../lib.js";
-import { Route, loadRoutes, findRoute } from "../bridges.js";
+import { Route, LockLeg, loadRoutes, findRoute, lockLegs } from "../bridges.js";
+import { sumLocked18, isRouteFailing, computeTransitions } from "../solvency-core.js";
 
 /** How many routes `--all` checks at once (override via EVMSEC_CONCURRENCY). */
 const ROUTE_CONCURRENCY = Number(process.env.EVMSEC_CONCURRENCY) || 5;
@@ -58,27 +59,104 @@ export async function solvency(args: string[]): Promise<void> {
     throw new Error(
       "usage: evmsec solvency <route-id> | --all | " +
         "--lock-chain <c> --escrow 0x.. --token 0x.. --mint-chain <c> --minted 0x.. " +
-        "[--since <block|date>] [--min-ratio 100] [--json]",
+        "[--since <block|date>] [--watch [--interval 60] [--webhook URL]] [--min-ratio 100] [--json]",
     );
   }
 
-  // Check routes with bounded concurrency; isolate failures so one unreadable
-  // route (bad RPC, renamed contract) can't abort the whole scan or mask the
-  // others — it surfaces as an ERROR result instead.
-  const results = await mapWithConcurrency(routes, ROUTE_CONCURRENCY, (route) => checkRouteSafe(route));
+  if (opts.watch) {
+    await watch(routes, opts);
+    return;
+  }
+
+  const results = await checkAll(routes);
 
   if (opts.json) console.log(JSON.stringify(results, null, 2));
   else render(results, opts.minRatio);
 
   // Non-zero exit on a breach OR on a route we couldn't verify — in CI, an
   // unconfirmable backing check is itself a failure, not a pass.
-  const failed = results.some(
-    (r) =>
-      r.verdict === "UNDERCOLLATERALIZED" ||
-      r.verdict === "ERROR" ||
-      (r.ratioPct !== null && r.ratioPct < opts.minRatio),
+  if (results.some((r) => isRouteFailing(r, opts.minRatio))) process.exitCode = 1;
+}
+
+/**
+ * Check routes with bounded concurrency; isolate failures so one unreadable
+ * route (bad RPC, renamed contract) can't abort the whole scan or mask the
+ * others — it surfaces as an ERROR result instead.
+ */
+function checkAll(routes: Route[]): Promise<SolvencyResult[]> {
+  return mapWithConcurrency(routes, ROUTE_CONCURRENCY, (route) => checkRouteSafe(route));
+}
+
+// ── watch (continuous monitoring) ────────────────────────────────────────────
+
+/**
+ * Poll the routes on an interval and alert once per breach *transition*
+ * (de-duped via computeTransitions), recovering quietly. Optional webhook POST.
+ * Clean shutdown on SIGINT/SIGTERM.
+ */
+async function watch(routes: Route[], opts: Opts): Promise<void> {
+  const intervalMs = Math.max(5, opts.intervalSec) * 1000;
+  const state = new Map<string, boolean>();
+  let stop = false;
+  const onSignal = (): void => {
+    stop = true;
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+
+  console.error(
+    `watching ${routes.length} route(s) every ${opts.intervalSec}s ` +
+      `(min-ratio ${opts.minRatio}%)${opts.webhook ? ", webhook on" : ""} — Ctrl-C to stop`,
   );
-  if (failed) process.exitCode = 1;
+
+  while (!stop) {
+    const results = await checkAll(routes);
+    const current = results.map((r) => ({ id: r.id, failing: isRouteFailing(r, opts.minRatio) }));
+    const transitions = computeTransitions(state, current);
+    for (const c of current) state.set(c.id, c.failing);
+    for (const t of transitions) {
+      const r = results.find((x) => x.id === t.id);
+      if (r) await emitAlert(t.kind, r, opts);
+    }
+    if (stop) break;
+    await sleepInterruptible(intervalMs, () => stop);
+  }
+
+  console.error("\nstopped.");
+}
+
+async function emitAlert(kind: "breach" | "recovery", r: SolvencyResult, opts: Opts): Promise<void> {
+  const at = new Date().toISOString();
+  const ratioStr = r.ratioPct === null ? "n/a" : `${r.ratioPct.toFixed(2)}%`;
+  if (opts.json) {
+    console.log(JSON.stringify({ event: kind, at, ...r }));
+  } else if (kind === "breach") {
+    const why = r.verdict === "ERROR" ? `  (ERROR: ${r.error})` : "";
+    console.log(`🚨 ${at}  BREACH     ${r.bridge} — ${r.asset} [${r.id}]  backing ${ratioStr}${why}`);
+  } else {
+    console.log(`✅ ${at}  RECOVERED  ${r.bridge} — ${r.asset} [${r.id}]  backing ${ratioStr}`);
+  }
+  if (opts.webhook) await postWebhook(opts.webhook, { event: kind, at, ...r });
+}
+
+async function postWebhook(url: string, payload: unknown): Promise<void> {
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.error(`  webhook POST failed: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+/** Sleep `ms`, but wake early (within ~250ms) when `stopped()` flips — keeps Ctrl-C snappy. */
+async function sleepInterruptible(ms: number, stopped: () => boolean): Promise<void> {
+  const step = 250;
+  for (let waited = 0; waited < ms && !stopped(); waited += step) {
+    await new Promise((r) => setTimeout(r, Math.min(step, ms - waited)));
+  }
 }
 
 /** checkRoute, but a thrown read becomes an ERROR result rather than aborting `--all`. */
@@ -90,7 +168,7 @@ async function checkRouteSafe(route: Route): Promise<SolvencyResult> {
       id: route.id,
       bridge: route.bridge,
       asset: route.asset,
-      lockChain: route.lock.chain,
+      lockChain: [...new Set(lockLegs(route).map((l) => l.chain))].join(" + "),
       mintChain: route.mint.chain,
       locked: "—",
       minted: "—",
@@ -104,77 +182,89 @@ async function checkRouteSafe(route: Route): Promise<SolvencyResult> {
 
 // ── measurement ─────────────────────────────────────────────────────────────
 
+/** One resolved lock leg: a token + escrow on some chain, with cached decimals. */
+interface LegCtx {
+  chain: ChainConfig;
+  token: Contract;
+  escrow: string;
+  dec: number;
+}
+
 interface RouteCtx {
   route: Route;
-  lockChain: ChainConfig;
+  legs: LegCtx[];
   mintChain: ChainConfig;
-  lockToken: Contract;
   mintToken: Contract;
-  escrow: string;
-  lockDec: number;
   mintDec: number;
 }
 
 /** Resolve contracts + decimals once so historical probes don't refetch them. */
 async function loadCtx(route: Route): Promise<RouteCtx> {
-  const lockChain = chain(route.lock.chain);
   const mintChain = chain(route.mint.chain);
-  const lockToken = new Contract(requireAddress(route.lock.token, "lock token"), ERC20_ABI, getProvider(lockChain));
   const mintToken = new Contract(requireAddress(route.mint.token, "mint token"), ERC20_ABI, getProvider(mintChain));
-  const [lockDec, mintDec] = await Promise.all([
-    withRetry(() => lockToken.decimals(), { label: "lock decimals" }).then(Number),
-    withRetry(() => mintToken.decimals(), { label: "mint decimals" }).then(Number),
-  ]);
-  return {
-    route,
-    lockChain,
-    mintChain,
-    lockToken,
-    mintToken,
-    escrow: requireAddress(route.lock.escrow, "escrow"),
-    lockDec,
-    mintDec,
-  };
+
+  const legs = await Promise.all(
+    lockLegs(route).map(async (leg): Promise<LegCtx> => {
+      const legChain = chain(leg.chain);
+      const token = new Contract(requireAddress(leg.token, "lock token"), ERC20_ABI, getProvider(legChain));
+      const dec = await withRetry(() => token.decimals(), { label: "lock decimals" }).then(Number);
+      return { chain: legChain, token, escrow: requireAddress(leg.escrow, "escrow"), dec };
+    }),
+  );
+  const mintDec = await withRetry(() => mintToken.decimals(), { label: "mint decimals" }).then(Number);
+
+  return { route, legs, mintChain, mintToken, mintDec };
 }
 
 interface Measurement {
-  lockedRaw: bigint;
   mintedRaw: bigint;
   locked18: bigint;
   minted18: bigint;
   mintBlock: number;
-  lockBlock: number;
   ts: number;
+  /** per-leg lock block, aligned to the mint block's timestamp. */
+  legBlocks: number[];
 }
 
 /**
  * Measure the invariant as of destination-chain block `mintBlock` (or latest),
- * aligning the source chain to that block's wall-clock timestamp.
+ * aligning each lock chain to that block's wall-clock timestamp and summing the
+ * legs (multi-asset / multi-escrow routes) into a common 18-dp fixed point.
  */
 async function measure(ctx: RouteCtx, mintBlock?: number): Promise<Measurement> {
   const mintProvider = getProvider(ctx.mintChain);
   const resolvedMintBlock = mintBlock ?? (await withRetry(() => mintProvider.getBlockNumber(), { label: "mint head" }));
   const ts = (await getBlockCached(mintProvider, ctx.mintChain.key, resolvedMintBlock)).timestamp;
-  const lockBlock = await blockAtOrBefore(getProvider(ctx.lockChain), ctx.lockChain.key, ts);
 
-  const [lockedRaw, mintedRaw] = await Promise.all([
-    withRetry(() => ctx.lockToken.balanceOf(ctx.escrow, { blockTag: lockBlock }), {
-      label: "balanceOf",
-    }) as Promise<bigint>,
+  const [legResults, mintedRaw] = await Promise.all([
+    Promise.all(
+      ctx.legs.map(async (leg) => {
+        const lockBlock = await blockAtOrBefore(getProvider(leg.chain), leg.chain.key, ts);
+        const raw = (await withRetry(() => leg.token.balanceOf(leg.escrow, { blockTag: lockBlock }), {
+          label: "balanceOf",
+        })) as bigint;
+        return { lockBlock, raw, dec: leg.dec };
+      }),
+    ),
     withRetry(() => ctx.mintToken.totalSupply({ blockTag: resolvedMintBlock }), {
       label: "totalSupply",
     }) as Promise<bigint>,
   ]);
 
   return {
-    lockedRaw,
     mintedRaw,
-    locked18: to18(lockedRaw, ctx.lockDec),
+    locked18: sumLocked18(legResults.map((l) => ({ raw: l.raw, decimals: l.dec }))),
     minted18: to18(mintedRaw, ctx.mintDec),
     mintBlock: resolvedMintBlock,
-    lockBlock,
     ts,
+    legBlocks: legResults.map((l) => l.lockBlock),
   };
+}
+
+/** Distinct lock-chain display name(s) for a route context. */
+function lockChainLabel(ctx: RouteCtx): string {
+  const names = [...new Set(ctx.legs.map((l) => l.chain.name))];
+  return names.join(" + ");
 }
 
 function isBreach(m: Measurement, minRatio: number): boolean {
@@ -202,9 +292,9 @@ async function checkRoute(route: Route): Promise<SolvencyResult> {
     id: route.id,
     bridge: route.bridge,
     asset: route.asset,
-    lockChain: ctx.lockChain.name,
+    lockChain: lockChainLabel(ctx),
     mintChain: ctx.mintChain.name,
-    locked: formatUnits(m.lockedRaw, ctx.lockDec),
+    locked: formatUnits(m.locked18, 18),
     minted: formatUnits(m.mintedRaw, ctx.mintDec),
     ratioPct,
     delta: `${d >= 0n ? "+" : "-"}${formatUnits(d < 0n ? -d : d, 18)}`,
@@ -227,9 +317,10 @@ async function bisect(route: Route, since: string, minRatio: number, json: boole
   try {
     [startM, headM] = await Promise.all([measure(ctx, start), measure(ctx, latest)]);
   } catch (e) {
+    const envs = [...new Set([...ctx.legs.map((l) => l.chain.key), ctx.mintChain.key])].map(envName).join(" / ");
     throw new Error(
       `historical state read failed (${e instanceof Error ? e.message : e}). ` +
-        `--since needs an archive RPC — set ${envName(ctx.lockChain.key)} / ${envName(ctx.mintChain.key)} to an archive node.`,
+        `--since needs an archive RPC — set ${envs} to an archive node.`,
     );
   }
 
@@ -298,11 +389,11 @@ async function bisect(route: Route, since: string, minRatio: number, json: boole
   console.log("─".repeat(68));
   console.log(`  last healthy   ${ctx.mintChain.name} block ${lo}  (${iso(lastHealthy.ts)})`);
   console.log(
-    `                 backing ${ratio(lastHealthy)}   locked ${fnum(ctx, lastHealthy.lockedRaw, "lock")}  minted ${fnum(ctx, lastHealthy.mintedRaw, "mint")}`,
+    `                 backing ${ratio(lastHealthy)}   locked ${flock(lastHealthy)}  minted ${fmint(ctx, lastHealthy.mintedRaw)}`,
   );
   console.log(`  first breached ${ctx.mintChain.name} block ${hi}  (${iso(firstBroken.ts)})`);
   console.log(
-    `                 backing ${ratio(firstBroken)}   locked ${fnum(ctx, firstBroken.lockedRaw, "lock")}  minted ${fnum(ctx, firstBroken.mintedRaw, "mint")}`,
+    `                 backing ${ratio(firstBroken)}   locked ${flock(firstBroken)}  minted ${fmint(ctx, firstBroken.mintedRaw)}`,
   );
   console.log(`  located in     ${probes} probes  ·  ${blockLink(ctx.mintChain, hi)}`);
   if (culprits.length) {
@@ -361,11 +452,15 @@ function ratio(m: Measurement): string {
   const pct = backingPct(m.locked18, m.minted18);
   return pct === null ? "n/a" : `${pct.toFixed(2)}%`;
 }
-function fnum(ctx: RouteCtx, raw: bigint, side: "lock" | "mint"): string {
-  return formatUnits(raw, side === "lock" ? ctx.lockDec : ctx.mintDec);
+/** Locked is summed across legs into 18 dp; format it at 18 dp. */
+function flock(m: Measurement): string {
+  return formatUnits(m.locked18, 18);
+}
+function fmint(ctx: RouteCtx, raw: bigint): string {
+  return formatUnits(raw, ctx.mintDec);
 }
 function fmt(ctx: RouteCtx, m: Measurement) {
-  return { backing: ratio(m), locked: fnum(ctx, m.lockedRaw, "lock"), minted: fnum(ctx, m.mintedRaw, "mint") };
+  return { backing: ratio(m), locked: flock(m), minted: fmint(ctx, m.mintedRaw) };
 }
 function iso(ts: number): string {
   return new Date(ts * 1000).toISOString();
@@ -405,11 +500,14 @@ interface Opts {
   json: boolean;
   minRatio: number;
   since?: string;
+  watch: boolean;
+  intervalSec: number;
+  webhook?: string;
   adHoc?: Route;
 }
 
 function parse(args: string[]): Opts {
-  const opts: Opts = { all: false, json: false, minRatio: 100 };
+  const opts: Opts = { all: false, json: false, minRatio: 100, watch: false, intervalSec: 60 };
   const adHoc: Partial<{ lockChain: string; escrow: string; token: string; mintChain: string; minted: string }> = {};
 
   for (let i = 0; i < args.length; i++) {
@@ -426,6 +524,15 @@ function parse(args: string[]): Opts {
         break;
       case "--since":
         opts.since = args[++i];
+        break;
+      case "--watch":
+        opts.watch = true;
+        break;
+      case "--interval":
+        opts.intervalSec = Number(args[++i]);
+        break;
+      case "--webhook":
+        opts.webhook = args[++i];
         break;
       case "--lock-chain":
         adHoc.lockChain = args[++i];
@@ -455,7 +562,7 @@ function parse(args: string[]): Opts {
       id: "ad-hoc",
       bridge: "ad-hoc route",
       asset: "asset",
-      lock: { chain: adHoc.lockChain as Route["lock"]["chain"], escrow: adHoc.escrow!, token: adHoc.token! },
+      lock: { chain: adHoc.lockChain as LockLeg["chain"], escrow: adHoc.escrow!, token: adHoc.token! },
       mint: { chain: adHoc.mintChain as Route["mint"]["chain"], token: adHoc.minted! },
     };
   }
