@@ -90,11 +90,52 @@ test("classifyMintAuthority: mintable + renounced ownership → info", () => {
   assert.equal(v.fail, false);
 });
 
-test("classifyMintAuthority: AccessControl minting → elevated regardless of owner", () => {
+test("classifyMintAuthority: AccessControl, holders not resolved → elevated", () => {
   const s = classifyMintSurface(dispatcher(MINT, HAS_ROLE));
-  const v = classifyMintAuthority(s, "unknown", null);
+  const v = classifyMintAuthority(s, "unknown", null); // minters undefined
   assert.equal(v.risk, "elevated");
-  assert.ok(v.summary.includes("role-gated"));
+  assert.ok(v.summary.includes("couldn't be enumerated"));
+});
+
+test("classifyMintAuthority: AccessControl with an EOA minter → critical, fails CI", () => {
+  const s = classifyMintSurface(dispatcher(MINT, HAS_ROLE));
+  const v = classifyMintAuthority(s, "unknown", null, [
+    { address: "0x00000000000000000000000000000000000000A1", kind: "eoa" },
+    { address: "0x00000000000000000000000000000000000000C0", kind: "contract" },
+  ]);
+  assert.equal(v.risk, "critical");
+  assert.equal(v.fail, true);
+  assert.ok(v.summary.includes("EOA"));
+});
+
+test("classifyMintAuthority: AccessControl, all minters are contracts → elevated", () => {
+  const s = classifyMintSurface(dispatcher(MINT, HAS_ROLE));
+  const v = classifyMintAuthority(s, "unknown", null, [
+    { address: "0x00000000000000000000000000000000000000C0", kind: "contract" },
+  ]);
+  assert.equal(v.risk, "elevated");
+  assert.equal(v.fail, false);
+  assert.ok(v.summary.includes("all contracts"));
+});
+
+test("classifyMintAuthority: AccessControl with zero current minters → info", () => {
+  const s = classifyMintSurface(dispatcher(MINT, HAS_ROLE));
+  const v = classifyMintAuthority(s, "unknown", null, []);
+  assert.equal(v.risk, "info");
+  assert.ok(v.summary.includes("no address currently holds MINTER_ROLE"));
+});
+
+test("classifyMintSurface: supply cap getter sets capped", () => {
+  const CAP = "355274ea"; // cap()
+  const s = classifyMintSurface(dispatcher(MINT, CAP));
+  assert.equal(s.capped, true);
+});
+
+test("classifyMintAuthority: cap is noted in the summary when present", () => {
+  const CAP = "355274ea";
+  const s = classifyMintSurface(dispatcher(MINT, OWNER, CAP));
+  const v = classifyMintAuthority(s, "eoa", "0x00000000000000000000000000000000000000A1");
+  assert.ok(v.summary.includes("bounded by a supply cap"));
 });
 
 test("classifyMintAuthority: no mint entrypoint → info, no fail", () => {

@@ -111,22 +111,44 @@ npm run evmsec -- mint-authority 0xWrappedToken --chain polygon [--json]
 ```
 
 It follows the proxy to its implementation (most bridge tokens are proxies),
-scans the bytecode for mint/burn/pause entrypoints and the auth model (Ownable
-vs OpenZeppelin AccessControl), then reads `owner()` on-chain and classifies it:
-**renounced**, a single **EOA** (one-key inflation risk), or a **contract**
-(multisig/timelock — inspect it). **Exit code is non-zero when an inflatable
-supply sits under a single EOA**, so it drops into CI alongside `solvency`:
+scans the bytecode for mint/burn/pause entrypoints, a supply **cap**, and the
+auth model (Ownable vs OpenZeppelin AccessControl). For Ownable tokens it reads
+`owner()`; for AccessControl tokens it **enumerates the actual `MINTER_ROLE`
+holders** (via AccessControlEnumerable, or `RoleGranted` history as a fallback)
+and classifies each as a single **EOA** (one-key inflation risk) or a
+**contract** (multisig/timelock — inspect it). It also reads the **cap value**
+when present, so bounded inflation reads differently from uncapped. **Exit code
+is non-zero when an inflatable supply sits under a single EOA**, so it drops into
+CI alongside `solvency`:
 
 ```bash
 evmsec mint-authority 0xWrappedToken || alert "wrapped token mint is single-key controlled"
 ```
 
-Honestly scoped like the others: this is a bytecode + `owner()` heuristic, not a
-proof. Role members (e.g. `MINTER_ROLE` holders) can't be enumerated from
-bytecode, and some tokens route minting through a separate `masterMinter` rather
-than `owner()` — so it flags and explains, and tells you to confirm the gating
-against source. The detection logic (`mint-authority-core.ts`) is unit-tested
-offline.
+Honestly scoped like the others: a bytecode + on-chain-read heuristic, not a
+proof. Role enumeration is best-effort (a public RPC that caps `getLogs` ranges
+may return an incomplete set — the tool says so), and some tokens route minting
+through a separate `masterMinter` rather than `owner()` — so it flags, explains,
+and tells you to confirm the gating against source. The detection logic
+(`mint-authority-core.ts`) is unit-tested offline.
+
+### `pause-guardian` — can transfers be frozen, and who holds the key?
+
+Many bridge tokens are Pausable. A single key that can pause a wrapped asset can
+halt every holder at once — a liveness / censorship vector. This asks: **is the
+token pausable, is it paused right now, and who holds the pause authority?**
+
+```bash
+npm run evmsec -- pause-guardian 0xWrappedToken --chain polygon [--json]
+```
+
+Same shape as `mint-authority`: follows the proxy, detects the Pausable surface
+and auth model, reads `paused()` to report the **current** state, and resolves
+the guardian — Ownable `owner()` or the enumerated `PAUSER_ROLE` holders,
+classified EOA vs contract. **Exit code is non-zero when a single EOA can freeze
+transfers.** A currently-paused token is flagged prominently regardless of who
+holds the key. Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is
+unit-tested.
 
 ### `settlement` — did the cross-chain intent actually get filled?
 
@@ -214,12 +236,14 @@ src/
   settlement-core.ts         pure ERC-7683 delivery-matching + verdict logic
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
+  pause-guardian-core.ts     pure pause capability + guardian classification
   *-core.test.ts             unit tests for the pure cores (no network)
   bridges.ts                 route registry loader
   commands/
     solvency.ts              flagship: lock-vs-mint backing check
     upgradeability.ts        EIP-1967 / legacy proxy admin risk
     mint-authority.ts        who can inflate the wrapped supply?
+    pause-guardian.ts        who can freeze transfers?
     settlement.ts            ERC-7683 cross-chain intent fill verification
     pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)
   index.ts                   CLI dispatcher

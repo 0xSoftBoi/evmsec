@@ -10,11 +10,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **`mint-authority <token>` command**: answers "can the wrapped supply be
   inflated, and by whom?" — the rug vector `solvency` doesn't cover. Follows the
-  proxy to its implementation, scans bytecode for mint/burn/pause entrypoints
-  and the auth model (Ownable vs AccessControl), reads `owner()` and classifies
-  it (renounced / single EOA / contract), and exits non-zero when an inflatable
-  supply sits under a single EOA. Pure logic in `mint-authority-core.ts` is
-  unit-tested offline.
+  proxy to its implementation, scans bytecode for mint/burn/pause entrypoints, a
+  supply **cap**, and the auth model (Ownable vs AccessControl). For Ownable
+  tokens it reads `owner()`; for AccessControl tokens it **enumerates the actual
+  `MINTER_ROLE` holders** (AccessControlEnumerable, or `RoleGranted` history as
+  a fallback) and classifies each EOA vs contract, reads the **cap value**, and
+  exits non-zero when an inflatable supply sits under a single EOA. Pure logic in
+  `mint-authority-core.ts` is unit-tested offline.
+- **`pause-guardian <token>` command**: can transfers be frozen, are they frozen
+  right now, and who holds the pause key? Follows the proxy, detects the Pausable
+  surface + auth model, reads `paused()`, and resolves the guardian (Ownable
+  `owner()` or enumerated `PAUSER_ROLE` holders). Exits non-zero when a single
+  EOA can freeze transfers. Pure logic in `pause-guardian-core.ts` is
+  unit-tested.
 - **`upgradeability --json`**: the command now has machine-readable output, so
   it drops into CI like the others.
 - **RPC resilience**: every on-chain read goes through a request timeout

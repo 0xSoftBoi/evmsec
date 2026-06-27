@@ -3,15 +3,20 @@ import { ChainConfig, chain } from "../config.js";
 import {
   EIP1967,
   ERC20_ABI,
+  ROLES,
   ZEPPELINOS,
   addrLink,
   addressFromSlot,
+  addressKind,
+  enumerateRoleHolders,
   getProvider,
   requireAddress,
   shortAddr,
   withRetry,
 } from "../lib.js";
-import { OwnerKind, classifyMintAuthority, classifyMintSurface } from "../mint-authority-core.js";
+import { OwnerKind, RoleHolder, classifyMintAuthority, classifyMintSurface } from "../mint-authority-core.js";
+
+const CAP_ABI = ["function cap() view returns (uint256)", "function maxSupply() view returns (uint256)"];
 
 /**
  * `evmsec mint-authority <token> [--chain ethereum] [--json]`
@@ -60,18 +65,29 @@ export async function mintAuthority(args: string[]): Promise<void> {
     try {
       const raw = (await withRetry(() => token.owner(), { label: "owner()" })) as string;
       owner = requireAddress(raw, "owner");
-      if (/^0x0+$/i.test(owner)) {
-        ownerKind = "renounced";
-      } else {
-        const ownerCode = await withRetry(() => provider.getCode(owner!), { label: "owner getCode" });
-        ownerKind = ownerCode === "0x" ? "eoa" : "contract";
-      }
+      ownerKind = /^0x0+$/i.test(owner) ? "renounced" : await addressKind(provider, owner);
     } catch {
       ownerKind = "unknown";
     }
   }
 
-  const verdict = classifyMintAuthority(surface, ownerKind, owner);
+  // For AccessControl tokens, enumerate the actual MINTER_ROLE holders and
+  // classify each — this turns "role-gated, go look" into a concrete answer.
+  let minters: RoleHolder[] | undefined;
+  let minterNote: string | undefined;
+  if (surface.authModel === "access-control" || surface.authModel === "ownable+access-control") {
+    const found = await enumerateRoleHolders(provider, target, ROLES.MINTER);
+    minterNote = found.note;
+    if (found.method !== "none") {
+      minters = [];
+      for (const a of found.holders) minters.push({ address: a, kind: await addressKind(provider, a) });
+    }
+  }
+
+  // Best-effort read of the supply cap value, if the surface advertised one.
+  const cap = surface.capped ? await readCap(provider, target) : null;
+
+  const verdict = classifyMintAuthority(surface, ownerKind, owner, minters);
 
   if (json) {
     console.log(
@@ -83,10 +99,14 @@ export async function mintAuthority(args: string[]): Promise<void> {
           mintable: surface.mintable,
           burnable: surface.burnable,
           pausable: surface.pausable,
+          capped: surface.capped,
+          cap,
           authModel: surface.authModel,
           mintEntrypoints: surface.mintEntrypoints,
           owner,
           ownerKind,
+          minters: verdict.minters ?? null,
+          minterNote: minterNote ?? null,
           risk: verdict.risk,
           summary: verdict.summary,
           indicators: surface.indicators,
@@ -96,10 +116,23 @@ export async function mintAuthority(args: string[]): Promise<void> {
       ),
     );
   } else {
-    print(c, target, implementation, verdict);
+    print(c, target, implementation, cap, minterNote, verdict);
   }
 
   if (verdict.fail) process.exitCode = 1;
+}
+
+/** Read cap()/maxSupply() as a string, or null if neither is callable. */
+async function readCap(provider: ReturnType<typeof getProvider>, target: string): Promise<string | null> {
+  const token = new Contract(target, CAP_ABI, provider);
+  for (const fn of ["cap", "maxSupply"] as const) {
+    try {
+      return String((await withRetry(() => token[fn](), { label: fn })) as bigint);
+    } catch {
+      // try the next getter
+    }
+  }
+  return null;
 }
 
 /** Follow EIP-1967 / legacy zeppelinos implementation slots; null if not a proxy. */
@@ -123,6 +156,8 @@ function print(
   c: ChainConfig,
   target: string,
   implementation: string | null,
+  cap: string | null,
+  minterNote: string | undefined,
   v: ReturnType<typeof classifyMintAuthority>,
 ): void {
   const s = v.surface;
@@ -135,9 +170,21 @@ function print(
   console.log(`  mintable        ${s.mintable ? "yes" : "no recognized mint entrypoint"}`);
   if (s.mintEntrypoints.length) console.log(`  entrypoints     ${s.mintEntrypoints.join(", ")}`);
   console.log(`  auth model      ${s.authModel}`);
+  console.log(
+    `  supply cap      ${s.capped ? (cap !== null ? cap : "yes (value unread)") : "none detected (uncapped)"}`,
+  );
   console.log(`  pausable        ${s.pausable ? "yes — transfers can be frozen" : "no"}`);
   if (v.owner) console.log(`  owner           ${v.owner}  → ${OWNER_LABEL[v.ownerKind]}`);
-  else console.log(`  owner           ${OWNER_LABEL[v.ownerKind]}`);
+  else if (s.authModel === "ownable" || s.authModel === "ownable+access-control")
+    console.log(`  owner           ${OWNER_LABEL[v.ownerKind]}`);
+  if (v.minters) {
+    if (v.minters.length === 0) console.log(`  MINTER_ROLE     no current holders`);
+    else
+      for (const m of v.minters)
+        console.log(`  MINTER_ROLE     ${m.address}  → ${m.kind === "eoa" ? "EOA (single key)" : "contract"}`);
+  } else if (minterNote) {
+    console.log(`  MINTER_ROLE     not enumerated — ${minterNote}`);
+  }
   console.log(`  risk            ${RISK_MARK[v.risk] ?? v.risk}`);
   console.log(`  ${addrLink(c, target)}`);
   console.log(`\n  ${v.summary}`);
@@ -147,7 +194,7 @@ function print(
     console.log(`\n  ⚠ owner() is a single EOA (${shortAddr(v.owner)}); if it gates minting,`);
     console.log(`    one compromised key can print unbacked supply.`);
   }
-  console.log(`\n  Heuristic from bytecode — confirm mint gating against the token's source.\n`);
+  console.log(`\n  Heuristic from bytecode + on-chain reads — confirm mint gating against source.\n`);
 }
 
 function parse(args: string[]): { address?: string; chainKey: string; json: boolean } {

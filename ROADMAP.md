@@ -17,11 +17,14 @@ implementation, scans bytecode for mint/burn/pause entrypoints and the auth mode
 (renounced / EOA / contract), and exits non-zero when an inflatable supply sits
 under a single EOA. Pure classification logic is unit-tested.
 
-**Still open (follow-ups).**
+Follow-ups since shipped: ✅ `MINTER_ROLE` holders are now enumerated
+(AccessControlEnumerable, or `RoleGranted` history as a fallback) and classified
+EOA vs contract; ✅ a supply cap (`cap()` / `maxSupply()`) is detected and read.
+Still open: resolve a `masterMinter`-style indirection where minting isn't gated
+by `owner()`.
 
-- Enumerate `MINTER_ROLE` holders from `RoleGranted` events (bytecode can't list them).
-- Detect a supply cap (`cap()` / `maxSupply()`) and flag uncapped + mintable.
-- Resolve a `masterMinter`-style indirection where minting isn't gated by `owner()`.
+A sibling check, **`pause-guardian <token>`**, also shipped: who can freeze
+transfers, is the token paused now, and is the pause key a single EOA.
 
 ## 2. `solvency --watch` — alert the moment backing breaks **[M]**
 

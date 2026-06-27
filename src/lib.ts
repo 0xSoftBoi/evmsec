@@ -2,6 +2,7 @@ import {
   JsonRpcProvider,
   FetchRequest,
   Block,
+  Contract,
   Interface,
   getAddress,
   isAddress,
@@ -66,6 +67,24 @@ export const ZEPPELINOS = {
 export const RPC_TIMEOUT_MS = Number(process.env.EVMSEC_RPC_TIMEOUT_MS) || 20_000;
 /** How many times to retry a transient RPC failure (override via EVMSEC_RPC_RETRIES). */
 export const RPC_RETRIES = Number(process.env.EVMSEC_RPC_RETRIES) || 3;
+
+/**
+ * OpenZeppelin AccessControl role identifiers. `DEFAULT_ADMIN_ROLE` is 0x00 by
+ * convention; the named roles are keccak256 of their label (re-derived in tests).
+ */
+export const ROLES = {
+  DEFAULT_ADMIN: `0x${"0".repeat(64)}`,
+  MINTER: keccak256(toUtf8Bytes("MINTER_ROLE")),
+  PAUSER: keccak256(toUtf8Bytes("PAUSER_ROLE")),
+} as const;
+
+/** AccessControl reads we need to enumerate role holders. */
+export const ACCESS_CONTROL_ABI = [
+  "function hasRole(bytes32 role, address account) view returns (bool)",
+  "function getRoleMemberCount(bytes32 role) view returns (uint256)",
+  "function getRoleMember(bytes32 role, uint256 index) view returns (address)",
+  "event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)",
+];
 
 const providers = new Map<string, JsonRpcProvider>();
 
@@ -143,6 +162,76 @@ export async function mapWithConcurrency<T, R>(
 export function requireAddress(input: string, label = "address"): string {
   if (!isAddress(input)) throw new Error(`invalid ${label}: ${input}`);
   return getAddress(input);
+}
+
+export type AddressKind = "eoa" | "contract";
+
+/** Is `address` an EOA (no code) or a contract? Used to spot single-key control. */
+export async function addressKind(provider: JsonRpcProvider, address: string): Promise<AddressKind> {
+  const code = await withRetry(() => provider.getCode(address), { label: `getCode ${address}` });
+  return code === "0x" ? "eoa" : "contract";
+}
+
+export interface RoleHolders {
+  holders: string[];
+  /** how the holders were found — enumerable (reliable), events (best-effort), or none. */
+  method: "enumerable" | "events" | "none";
+  note?: string;
+}
+
+/**
+ * Enumerate the current holders of an AccessControl `role`. Prefers
+ * AccessControlEnumerable (`getRoleMember*`, exact); falls back to scanning
+ * `RoleGranted` events and re-checking `hasRole` (best-effort — public nodes
+ * often cap `getLogs` ranges, so a failure is reported honestly, not hidden).
+ */
+export async function enumerateRoleHolders(
+  provider: JsonRpcProvider,
+  address: string,
+  role: string,
+): Promise<RoleHolders> {
+  const c = new Contract(address, ACCESS_CONTROL_ABI, provider);
+
+  // 1) AccessControlEnumerable — the exact, paginated path.
+  try {
+    const count = Number(await withRetry(() => c.getRoleMemberCount(role), { label: "getRoleMemberCount" }));
+    if (Number.isFinite(count)) {
+      const holders: string[] = [];
+      for (let i = 0; i < count; i++) {
+        holders.push(getAddress(String(await withRetry(() => c.getRoleMember(role, i), { label: "getRoleMember" }))));
+      }
+      return { holders, method: "enumerable" };
+    }
+  } catch {
+    // not AccessControlEnumerable — fall through to events
+  }
+
+  // 2) RoleGranted events + current hasRole. Best-effort over full history.
+  try {
+    const logs = await withRetry(() => c.queryFilter(c.filters.RoleGranted(role), 0, "latest"), {
+      label: "RoleGranted logs",
+    });
+    const seen = new Set<string>();
+    for (const l of logs) {
+      const account = (l as unknown as { args?: { account?: string } }).args?.account;
+      if (account) seen.add(getAddress(account));
+    }
+    const holders: string[] = [];
+    for (const a of seen) {
+      if (await withRetry(() => c.hasRole(role, a), { label: "hasRole" })) holders.push(a);
+    }
+    return {
+      holders,
+      method: "events",
+      note: "from RoleGranted history — may be incomplete if the RPC caps getLogs ranges",
+    };
+  } catch (err) {
+    return {
+      holders: [],
+      method: "none",
+      note: `could not enumerate role holders (${err instanceof Error ? err.message : String(err)}) — try an archive/indexer RPC`,
+    };
+  }
 }
 
 /** Read a storage slot and interpret its low 20 bytes as an address (zero -> null). */
