@@ -197,6 +197,31 @@ The backing math, the forensic bisection, and the proxy-slot parsing are
 unit-tested and run offline; CI (`.github/workflows/ci.yml`) runs typecheck +
 tests on Node 20 and 22 for every push and PR.
 
+## Supply chain / Security
+
+A security tool should be transparent about its own dependencies. evmsec ships
+a **CycloneDX** Software Bill of Materials (SBOM) enumerating every npm
+dependency, checked in at [`sbom/evmsec.cdx.json`](./sbom/evmsec.cdx.json) and
+regenerated per release:
+
+```bash
+npx --yes @cyclonedx/cyclonedx-npm \
+  --output-format JSON --output-file sbom/evmsec.cdx.json
+```
+
+In CI (`.github/workflows/`), pinned-by-SHA workflows provide **continuous OSS
+scanning + a published SBOM**:
+
+- `sbom.yml` — regenerates the CycloneDX SBOM and attaches it as a release
+  asset on every published release.
+- `scorecard.yml` — runs [OpenSSF Scorecard](https://securityscorecards.dev/)
+  weekly and on push, writing results to the repository's Security tab.
+
+Every third-party Action is pinned to a full commit SHA. These workflows are
+present and ready; they begin running once GitHub Actions billing is enabled for
+the org. This is supply-chain hygiene and dependency transparency — not a formal
+security audit or a SOC 2 attestation.
+
 ## Roadmap
 
 See [ROADMAP.md](./ROADMAP.md) for the full, scoped plan (each item is grounded
