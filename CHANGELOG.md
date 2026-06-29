@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`oracle-hygiene <feed>` command**: is a Chainlink-style price feed fresh and
+  safe to read _right now_? Pulls `latestRoundData()` and flags the failure modes
+  a consumer can't see when it blindly trusts the price — a **stale** answer
+  (older than `--heartbeat`, default 3600s → critical), a **zero/negative**
+  answer (critical), an **incomplete** round (`updatedAt == 0`), and a
+  **carried-over** round (`answeredInRound < roundId` → elevated). On L2s,
+  `--sequencer <uptime-feed>` adds the Chainlink sequencer-uptime check: a
+  sequencer reported **down** is critical (a fresh price is meaningless if the
+  chain was offline), and one that only just restarted (within `--grace`, default
+  1h) is elevated. Staleness is measured against the chain's own latest-block
+  timestamp. Exits non-zero when the feed is unusable. Pure logic in
+  `oracle-core.ts` is unit-tested; validated live against mainnet ETH/USD and the
+  Arbitrum sequencer feed.
 - **`admin-power <address>` command**: answers not just _who_ controls a contract
   (as `upgradeability` does) but _what kind_ of authority it is — the question
   that decides the blast radius. Resolves the controlling authority (EIP-1967 /

@@ -48,6 +48,11 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
   timelock / unrecognized contract / renounced) and flags single-key control.
   Closes the "who, and how dangerous" half of the centralization question that
   `upgradeability` only half-answered. See `authority-core.ts`.
+- **`oracle-hygiene`** — reads a Chainlink-style `latestRoundData()` and flags
+  staleness past the heartbeat, a zero/negative answer, an incomplete or
+  carried-over round, and (on L2s, via `--sequencer`) a down/just-restarted
+  sequencer. See `oracle-core.ts`. *Still open:* single-source detection (needs
+  the aggregator's oracle count) and a deviation check against a second feed.
 
 ### Next (priority order)
 
@@ -57,13 +62,7 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
    AccessControl role and its members, not just the proxy admin). *Why:* the
    threshold is meaningless if a module can bypass it.
 
-2. **`oracle-hygiene <feed>`** — for a Chainlink-style price feed, read
-   `latestRoundData()` and flag **staleness** (`updatedAt` older than the feed's
-   heartbeat), a **zero/negative answer**, and **single-source** designs; on L2s,
-   check the **sequencer-uptime feed**. *Why:* stale/2manipulated oracles are a
-   top-five DeFi loss category and are pure on-chain reads.
-
-3. **`compiler-bugs <address>`** — read the solc version from the contract's CBOR
+2. **`compiler-bugs <address>`** — read the solc version from the contract's CBOR
    metadata trailer (evmsec already parses CBOR for `pq-readiness`) and look it up
    against the official solc `bugs_by_version.json`. *Why:* known-buggy compiler
    versions (storage-corruption, ABI-encoder bugs) are a deterministic, citable

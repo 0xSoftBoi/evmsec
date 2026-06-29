@@ -214,6 +214,36 @@ transfers.** A currently-paused token is flagged prominently regardless of who
 holds the key. Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is
 unit-tested.
 
+### `oracle-hygiene` — is this price feed fresh and safe to read right now?
+
+A stale or broken price feed is one of the most common DeFi loss causes: a
+protocol that reads `latestRoundData()` and trusts it will price collateral off a
+number that stopped updating hours ago, went to zero, or was frozen while an L2
+sequencer was down. Each of those is an on-chain-readable invariant.
+
+```bash
+npm run evmsec -- oracle-hygiene 0xFeed --chain ethereum --heartbeat 3600 [--json]
+# on an L2, also check the sequencer-uptime feed:
+npm run evmsec -- oracle-hygiene 0xFeed --chain arbitrum --sequencer 0xSeqUptimeFeed
+```
+
+Pulls the latest round (Chainlink-style aggregator) and flags:
+
+- **staleness** — the answer is older than `--heartbeat` (default 3600s) →
+  `critical`, fails CI;
+- **zero / negative answer** — never a valid price → `critical`, fails CI;
+- **incomplete round** — `updatedAt == 0` → `critical`;
+- **carried-over round** — `answeredInRound < roundId` → `elevated`;
+- **L2 sequencer** — with `--sequencer <uptime-feed>`, a sequencer reported
+  **down** is `critical` (a fresh-looking price means nothing if the chain it
+  priced was offline), and one that only just restarted (within `--grace`,
+  default 1h) is `elevated`.
+
+Staleness is measured against the chain's own latest-block timestamp, not wall
+clock. **Freshness/liveness only** — this can't attest the price is _correct_ or
+sourced from enough nodes; that's a different lane. Pure logic in
+`oracle-core.ts` is unit-tested offline.
+
 ### `settlement` — did the cross-chain intent actually get filled?
 
 Decode an intent on the source chain to learn what the filler _promised_ to
@@ -363,6 +393,7 @@ src/
   protocols/                 pluggable settlement decoders (Protocol interface; erc7683, across, cow)
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
   authority-core.ts          pure authority classification (EOA / Safe / timelock → verdict)
+  oracle-core.ts             pure price-feed hygiene (staleness / zero / sequencer → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification
   *-core.test.ts             unit tests for the pure cores (no network)
@@ -373,6 +404,7 @@ src/
     admin-power.ts           what kind of authority controls it (EOA/Safe/timelock)?
     mint-authority.ts        who can inflate the wrapped supply?
     pause-guardian.ts        who can freeze transfers?
+    oracle-hygiene.ts        is this price feed fresh & safe to read now?
     settlement.ts            cross-chain intent fill verification (erc7683/across/cow)
     message-proof.ts         cross-chain message attestation (Wormhole/Hyperlane)
     pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)
@@ -401,7 +433,8 @@ npm run build         # compile to dist/ (what `prepublishOnly` ships)
 
 The backing math, the multi-asset summation, the forensic bisection, the
 `--watch` transition/degrade logic, the registry validator, the proxy-slot
-parsing, the PQ / mint-authority / pause-guardian classifiers, the settlement
+parsing, the PQ / authority / mint-authority / pause-guardian / oracle-hygiene
+classifiers, the settlement
 decoders + fill-discovery + diagnosis, the VAA parser / attestation classifiers,
 and the RPC retry/concurrency helpers are unit-tested and run offline. Test
 discovery is explicit (`scripts/run-tests.mjs`) so it behaves identically across

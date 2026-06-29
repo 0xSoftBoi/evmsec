@@ -7,11 +7,13 @@ import { mintAuthority } from "./commands/mint-authority.js";
 import { pauseGuardian } from "./commands/pause-guardian.js";
 import { messageProof } from "./commands/message-proof.js";
 import { adminPower } from "./commands/admin-power.js";
+import { oracleHygiene } from "./commands/oracle-hygiene.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   solvency,
   upgradeability,
   "admin-power": adminPower,
+  "oracle-hygiene": oracleHygiene,
   settlement,
   "pq-readiness": pqReadiness,
   "mint-authority": mintAuthority,
@@ -33,6 +35,8 @@ commands:
                                   (mint entrypoints + owner/MINTER_ROLE + cap)
   pause-guardian <token>        can transfers be frozen, are they now, and who
                                   holds the pause key? (owner/PAUSER_ROLE)
+  oracle-hygiene <feed>         is this price feed fresh & safe to read now?
+                                  (staleness vs heartbeat, zero answer, L2 sequencer)
   settlement                    did a cross-chain intent actually get filled?
                                   (--protocol erc7683 --intent-tx --fill-tx)
   message-proof <--layer>       was a cross-chain message validly attested?
@@ -67,6 +71,8 @@ examples:
   evmsec admin-power 0xProxy --chain ethereum --min-delay 48
   evmsec mint-authority 0xWrappedToken --chain polygon --json
   evmsec pause-guardian 0xWrappedToken --chain polygon
+  evmsec oracle-hygiene 0xFeed --chain ethereum --heartbeat 3600
+  evmsec oracle-hygiene 0xFeed --chain arbitrum --sequencer 0xSeqUptimeFeed
   evmsec message-proof --layer hyperlane --chain base --id 0xMessageId
   evmsec message-proof --layer wormhole --chain ethereum --vaa 0x01000000... --json
   evmsec settlement --source-chain ethereum --intent-tx 0xOpen \\
