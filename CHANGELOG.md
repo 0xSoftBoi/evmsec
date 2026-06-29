@@ -30,6 +30,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Multi-asset / multi-escrow routes**: a route's `lock` may now be an array of
   legs `{chain, escrow, token}`, summed (normalized to 18 dp) against the minted
   supply. Backward-compatible with single-leg routes.
+- **Settlement protocol abstraction**: settlement now decodes intents through a
+  pluggable `Protocol` interface (`parseIntent`/`parseFill`) under
+  `src/protocols/`, selected with `--protocol` (default `erc7683`). Today's
+  ERC-7683 logic moved behind it unchanged; the shared delivery-matching core is
+  reused. This is the seam the Across/UniswapX/CoW decoders plug into. Decoders
+  are pure and unit-tested (the ERC-7683 one round-trips a real ABI-encoded
+  `Open` event). Settlement reads now also use the RPC retry layer. JSON output
+  gains a `protocol` field.
 - **Registry validation**: `npm run validate:registry` checks `bridges.json` for
   shape, unique kebab-case ids, known chains, EIP-55 **checksummed** addresses,
   and a cited source URL for any route not marked `"verified": false`. Wired into

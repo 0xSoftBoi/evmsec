@@ -262,7 +262,8 @@ src/
   lib.test.ts                unit tests for the pure logic (no network)
   solvency-core.ts           pure backing summation, breach predicate, watch transitions
   registry-core.ts           pure bridges.json validator (shape, chains, checksums, sources)
-  settlement-core.ts         pure ERC-7683 delivery-matching + verdict logic
+  settlement-core.ts         pure delivery-matching + verdict logic (protocol-agnostic)
+  protocols/                 pluggable settlement decoders (Protocol interface; erc7683)
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification

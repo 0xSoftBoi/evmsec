@@ -67,6 +67,11 @@ each with **distinct events**:
 `parseFill(tx)` → normalized `{ recipient, token, amount, deadline }` — with one
 module per protocol under `src/protocols/`. `--protocol across|cow|uniswapx|erc7683`.
 
+**Status.** ✅ The abstraction has shipped: the `Protocol` interface +
+`src/protocols/` registry, with ERC-7683 moved behind it and selected via
+`--protocol` (default). 🔜 Remaining: the Across, UniswapX, and CoW decoder
+modules — each a `Protocol` plugged into the unchanged matching core.
+
 **Acceptance.** Each protocol verifies a real mainnet settlement; the core
 delivery-matching logic is reused unchanged.
 

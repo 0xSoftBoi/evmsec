@@ -27,8 +27,8 @@ commands:
                                   (mint entrypoints + owner/MINTER_ROLE + cap)
   pause-guardian <token>        can transfers be frozen, are they now, and who
                                   holds the pause key? (owner/PAUSER_ROLE)
-  settlement                    did an ERC-7683 cross-chain intent actually get
-                                  filled? (--source-chain --intent-tx --fill-tx)
+  settlement                    did a cross-chain intent actually get filled?
+                                  (--protocol erc7683 --intent-tx --fill-tx)
   pq-readiness <address>        is this verifier post-quantum ready, or
                                   Shor-breakable? (ECDSA/BLS vs ML-DSA/lattice)
 
