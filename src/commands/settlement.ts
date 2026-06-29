@@ -4,6 +4,7 @@ import { ERC20_ABI, getBlockCached, getProvider, shortAddr, txLink, withRetry } 
 import { ExpectedOutput, classify, matchDelivery } from "../settlement-core.js";
 import { DEFAULT_PROTOCOL, NormalizedOrder, getProtocol } from "../protocols/index.js";
 import { FillCandidate, chunkRange, selectFillTx } from "../discovery-core.js";
+import { Delivery, diagnose } from "../diagnose-core.js";
 
 /** getLogs sub-range size for fill scanning (override via EVMSEC_SCAN_CHUNK). */
 const SCAN_CHUNK = Number(process.env.EVMSEC_SCAN_CHUNK) || 10_000;
@@ -21,9 +22,9 @@ export async function settlement(args: string[]): Promise<void> {
   const o = parse(args);
   if (!o.sourceChain || !o.intentTx) {
     throw new Error(
-      "usage: evmsec settlement --source-chain <c> --intent-tx <openTx> [--fill-tx <fillTx>] " +
+      "usage: evmsec settlement [diagnose] --source-chain <c> --intent-tx <openTx> [--fill-tx <fillTx>] " +
         "[--protocol erc7683|across|cow] [--dest-chain <c>] [--scan-blocks 50000] [--finality-depth 12] [--json]\n" +
-        "(omit --fill-tx to auto-discover it on the destination; for CoW pass the settlement tx as --intent-tx)",
+        "(omit --fill-tx to auto-discover it; `settlement diagnose ...` classifies why an intent didn't settle)",
     );
   }
 
@@ -45,6 +46,13 @@ export async function settlement(args: string[]): Promise<void> {
   const destChain = resolveDestChain(o.destChain, outputs);
   const destProvider = getProvider(destChain);
   const onDest = outputs.filter((x) => x.chainId === destChain.chainId);
+
+  // Forensic mode: an intent that should have settled but didn't. Classify the
+  // failure mode from what (if anything) reached the recipient.
+  if (o.diagnose) {
+    await runDiagnose(destChain, onDest, order, o.scanBlocks, o.json);
+    return;
+  }
 
   // Auto-discover the fill tx on the destination when the user didn't supply one.
   let fillTx = o.fillTx;
@@ -183,6 +191,77 @@ async function discoverFillTx(destChain: ChainConfig, onDest: ExpectedOutput[], 
   return match.tx;
 }
 
+/**
+ * `--diagnose`: scan the destination for the expected token's deliveries to the
+ * recipient and classify why the intent did (or didn't) settle. Exits non-zero
+ * on any non-`settled` verdict.
+ */
+async function runDiagnose(
+  destChain: ChainConfig,
+  onDest: ExpectedOutput[],
+  order: NormalizedOrder,
+  scanBlocks: number,
+  json: boolean,
+): Promise<void> {
+  const target = onDest.find((o) => !o.native);
+  if (!target) {
+    throw new Error("can't diagnose a native-token delivery from logs — inspect the fill tx manually");
+  }
+  const provider = getProvider(destChain);
+  const head = await withRetry(() => provider.getBlockNumber(), { label: "dest head" });
+  const from = Math.max(0, head - Math.max(1, scanBlocks));
+  const token = new Contract(target.token, ERC20_ABI, provider);
+  const filter = token.filters.Transfer(null, target.recipient);
+
+  const deliveries: Delivery[] = [];
+  for (const [lo, hi] of chunkRange(from, head, SCAN_CHUNK)) {
+    try {
+      const logs = await withRetry(() => token.queryFilter(filter, lo, hi), { label: "diagnose scan" });
+      for (const l of logs) {
+        const ev = l as unknown as { args: { value: bigint }; transactionHash: string; blockNumber: number };
+        const ts = (await getBlockCached(provider, destChain.key, ev.blockNumber)).timestamp;
+        deliveries.push({ value: ev.args.value, ts, tx: ev.transactionHash });
+      }
+    } catch {
+      // node rejected this range — skip, continue best-effort
+    }
+  }
+
+  const d = diagnose({ amount: target.amount, deadline: order.fillDeadline, toRecipient: deliveries });
+  const mark = d.mode === "settled" ? "✓" : "✗";
+
+  if (json) {
+    console.log(
+      JSON.stringify(
+        {
+          mode: d.mode,
+          orderId: order.orderId,
+          destChain: destChain.name,
+          token: target.token,
+          recipient: target.recipient,
+          expected: target.amount.toString(),
+          delivered: d.deliveredValue.toString(),
+          tx: d.tx ?? null,
+          evidence: d.evidence,
+        },
+        null,
+        2,
+      ),
+    );
+  } else {
+    console.log(`\nSettlement diagnosis — order ${shortAddr(order.orderId)} on ${destChain.name}`);
+    console.log("─".repeat(70));
+    console.log(`  outcome     ${mark} ${d.mode.toUpperCase()}`);
+    console.log(`  recipient   ${target.recipient}`);
+    console.log(`  expected    ${target.amount}   delivered ${d.deliveredValue}`);
+    if (d.tx) console.log(`  fill tx     ${d.tx}\n              ${txLink(destChain, d.tx)}`);
+    for (const e of d.evidence) console.log(`  · ${e}`);
+    console.log();
+  }
+
+  if (d.mode !== "settled") process.exitCode = 1;
+}
+
 function resolveDestChain(destChainKey: string | undefined, outputs: ExpectedOutput[]): ChainConfig {
   if (destChainKey) return chain(destChainKey);
   const ids = [...new Set(outputs.map((x) => x.chainId))];
@@ -270,13 +349,18 @@ interface Opts {
   fillTx?: string;
   scanBlocks: number;
   finalityDepth: number;
+  diagnose: boolean;
   json: boolean;
 }
 
 function parse(args: string[]): Opts {
-  const o: Opts = { finalityDepth: 12, scanBlocks: 50_000, json: false };
+  const o: Opts = { finalityDepth: 12, scanBlocks: 50_000, diagnose: false, json: false };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
+      case "diagnose":
+      case "--diagnose":
+        o.diagnose = true;
+        break;
       case "--protocol":
         o.protocol = args[++i];
         break;

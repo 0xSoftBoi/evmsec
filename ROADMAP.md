@@ -105,14 +105,16 @@ only when the underlying attestation is confirmed on the destination.
 **Acceptance.** For a supported messaging layer, the verdict distinguishes
 "tokens arrived" from "tokens arrived _and_ the message was validly attested."
 
-## 8. `settlement diagnose` — why didn't this intent settle? **[M]**
+## 8. `settlement diagnose` — why didn't this intent settle? ✅ **shipped**
 
-**Why.** The forensic counterpart to verification: an intent that should have
-settled but didn't.
-
-**Approach.** Correlate the intent against the destination: never filled vs
-filled-late vs filled-wrong-recipient/amount. Where a continuous on-chain state
-is involved, reuse the `solvency --since` bisection to pin when it broke.
+`settlement diagnose` correlates the intent against the destination and
+classifies the failure mode — `never-filled` / `underfilled` / `filled-late` /
+`settled` — with on-chain evidence (the completing tx, how late, how short),
+exiting non-zero on anything but settled. Classifier is pure + unit-tested
+(`diagnose-core.ts`). Still open: distinguishing a **wrong-recipient** fill from
+never-filled (needs a full token-transfer scan / indexer — currently folded into
+`never-filled` with a note), and reusing the `--since` bisection for
+continuous-state intents.
 
 **Acceptance.** Given an unsettled intent, output the specific failure mode with
 the supporting on-chain evidence.

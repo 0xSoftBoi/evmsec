@@ -48,6 +48,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   delivery (chunked to survive `getLogs` range caps) and picks the earliest tx
   that satisfies the output, falling back to a clear message otherwise. The
   selection + chunking logic (`discovery-core.ts`) is pure and unit-tested.
+- **`settlement diagnose`**: the forensic counterpart — for an intent that should
+  have settled but didn't, scans the destination for deliveries to the recipient
+  and classifies the failure mode (`never-filled` / `underfilled` / `filled-late`
+  / `settled`) with on-chain evidence, exiting non-zero on anything but settled.
+  The classifier (`diagnose-core.ts`) is pure and unit-tested.
 - **Registry validation**: `npm run validate:registry` checks `bridges.json` for
   shape, unique kebab-case ids, known chains, EIP-55 **checksummed** addresses,
   and a cited source URL for any route not marked `"verified": false`. Wired into

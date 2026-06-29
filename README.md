@@ -205,6 +205,17 @@ Per output it reports `settled` / `unsettled` / `anomaly` and exits non-zero on
 anything but a clean settlement — catching missing fills, wrong-recipient fills,
 late fills, and underfills.
 
+**`settlement diagnose`** is the forensic counterpart for an intent that _should_
+have settled but didn't. Without needing a fill tx, it scans the destination for
+the expected token's deliveries to the recipient and classifies the failure
+mode — `never-filled`, `underfilled`, `filled-late`, or `settled` — with the
+on-chain evidence (the completing tx, how late, how short):
+
+```bash
+npm run evmsec -- settlement diagnose --protocol across \
+  --source-chain ethereum --intent-tx 0xDepositTx [--scan-blocks 50000] [--json]
+```
+
 Honestly scoped. Each decoder reads the protocol's own deposit/trade event (ABIs
 from the official contracts) and verifies ERC-20 deliveries via Transfer logs;
 native-token outputs are flagged, not proven. **Omit `--fill-tx` to
@@ -281,6 +292,7 @@ src/
   solvency-core.ts           pure backing summation, breach predicate, watch transitions
   registry-core.ts           pure bridges.json validator (shape, chains, checksums, sources)
   discovery-core.ts          pure fill-tx selection + getLogs range chunking
+  diagnose-core.ts           pure settlement failure-mode classification
   settlement-core.ts         pure delivery-matching + verdict logic (protocol-agnostic)
   protocols/                 pluggable settlement decoders (Protocol interface; erc7683, across, cow)
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
