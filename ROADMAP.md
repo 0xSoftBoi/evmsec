@@ -67,10 +67,15 @@ each with **distinct events**:
 `parseFill(tx)` → normalized `{ recipient, token, amount, deadline }` — with one
 module per protocol under `src/protocols/`. `--protocol across|cow|uniswapx|erc7683`.
 
-**Status.** ✅ The abstraction has shipped: the `Protocol` interface +
-`src/protocols/` registry, with ERC-7683 moved behind it and selected via
-`--protocol` (default). 🔜 Remaining: the Across, UniswapX, and CoW decoder
-modules — each a `Protocol` plugged into the unchanged matching core.
+**Status.** ✅ Abstraction + **ERC-7683, Across, and CoW** decoders shipped, each
+a `Protocol` plugged into the unchanged matching core and selected via
+`--protocol`. ⏸ **UniswapX deferred by design**: its Reactor `Fill` event carries
+only `(orderHash, filler, swapper, nonce)` — no output token/amount — so the
+promised outputs can't be read from logs; verifying it needs the signed order or
+the `execute()` calldata, a separate lift. 🔜 Also open: validate each decoder
+against a real mainnet settlement (the round-trip tests confirm the decoders
+match their declared ABIs; live validation was blocked here by the environment's
+`eth_getLogs` restriction).
 
 **Acceptance.** Each protocol verifies a real mainnet settlement; the core
 delivery-matching logic is reused unchanged.

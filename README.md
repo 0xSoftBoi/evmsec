@@ -179,28 +179,42 @@ unit-tested.
 
 ### `settlement` — did the cross-chain intent actually get filled?
 
-For [ERC-7683](https://eips.ethereum.org/EIPS/eip-7683) intents: decode the
-`Open` event on the source chain to learn what the filler _promised_ to deliver
-(`maxSpent`), then check the destination `fill` tx really delivered that token
-and amount to the intended recipient, before the `fillDeadline`, and final.
+Decode an intent on the source chain to learn what the filler _promised_ to
+deliver, then check the `fill` tx really delivered that token and amount to the
+intended recipient, before the deadline, and final. The decoder is pluggable via
+`--protocol` (default ERC-7683):
+
+| `--protocol` | intent event                          | notes                                                                                       |
+| ------------ | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `erc7683`    | `Open` (`maxSpent`)                   | the [ERC-7683](https://eips.ethereum.org/EIPS/eip-7683) standard; cross-chain               |
+| `across`     | `FundsDeposited` / `V3FundsDeposited` | Across SpokePool; cross-chain                                                               |
+| `cow`        | `Trade` (batch)                       | CoW Protocol; **same-chain** — pass the settlement tx as both `--intent-tx` and `--fill-tx` |
 
 ```bash
-npm run evmsec -- settlement \
-  --source-chain ethereum --intent-tx 0xOpenTxHash \
-  --fill-tx 0xFillTxHash [--dest-chain base] [--finality-depth 12] [--json]
+# ERC-7683 / Across (cross-chain)
+npm run evmsec -- settlement --protocol across \
+  --source-chain ethereum --intent-tx 0xDepositTx \
+  --fill-tx 0xFillTx [--dest-chain base] [--finality-depth 12] [--json]
+
+# CoW (same-chain: one settlement tx is both sides)
+npm run evmsec -- settlement --protocol cow \
+  --source-chain ethereum --intent-tx 0xSettleTx --fill-tx 0xSettleTx
 ```
 
 Per output it reports `settled` / `unsettled` / `anomaly` and exits non-zero on
 anything but a clean settlement — catching missing fills, wrong-recipient fills,
 late fills, and underfills.
 
-This is a **packaging** tool, honestly scoped — settlement logic lives inside
-every solver, but not as a standalone auditor you can point at an arbitrary
-intent. **v1 limits:** ERC-7683 only (Across/CoW/UniswapX have their own
-formats); it verifies ERC-20 deliveries via Transfer logs (native-token outputs
-are flagged, not proven); it does **not** cryptographically verify cross-chain
-message proofs; and you supply the `--fill-tx` (auto-discovery needs an indexer
-— roadmap). Treat it as a settlement _audit helper_, not an oracle of truth.
+Honestly scoped. Each decoder reads the protocol's own deposit/trade event (ABIs
+from the official contracts) and verifies ERC-20 deliveries via Transfer logs;
+native-token outputs are flagged, not proven. Limits: **UniswapX** isn't
+supported — its `Fill` event carries no output amounts, so the promise can't be
+read from logs alone (it needs the signed order / calldata — roadmap). CoW
+verifies delivery to the order `owner` (the `Trade` event omits an optional
+`receiver`). It does **not** cryptographically verify cross-chain message proofs,
+and you supply the `--fill-tx` (auto-discovery is on the roadmap). Decoders are
+unit-tested offline; **validate a new protocol against a real settlement before
+trusting a number.** Treat it as a settlement _audit helper_, not an oracle.
 
 ### `pq-readiness` — is this verifier quantum-safe, or printing forgeries later?
 
@@ -263,7 +277,7 @@ src/
   solvency-core.ts           pure backing summation, breach predicate, watch transitions
   registry-core.ts           pure bridges.json validator (shape, chains, checksums, sources)
   settlement-core.ts         pure delivery-matching + verdict logic (protocol-agnostic)
-  protocols/                 pluggable settlement decoders (Protocol interface; erc7683)
+  protocols/                 pluggable settlement decoders (Protocol interface; erc7683, across, cow)
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification

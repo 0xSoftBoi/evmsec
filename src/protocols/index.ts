@@ -1,9 +1,13 @@
 import { Protocol } from "./types.js";
 import { erc7683 } from "./erc7683.js";
+import { across } from "./across.js";
+import { cow } from "./cow.js";
 
 /** All settlement protocols this tool can decode, keyed by `--protocol` value. */
 export const PROTOCOLS: Record<string, Protocol> = {
   [erc7683.key]: erc7683,
+  [across.key]: across,
+  [cow.key]: cow,
 };
 
 export const DEFAULT_PROTOCOL = erc7683.key;
@@ -16,4 +20,4 @@ export function getProtocol(key: string): Protocol {
   return p;
 }
 
-export type { Protocol, NormalizedOrder, LogLike } from "./types.js";
+export type { Protocol, NormalizedOrder, LogLike, IntentContext } from "./types.js";

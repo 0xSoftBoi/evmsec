@@ -18,8 +18,8 @@ export async function settlement(args: string[]): Promise<void> {
   if (!o.sourceChain || !o.intentTx || !o.fillTx) {
     throw new Error(
       "usage: evmsec settlement --source-chain <c> --intent-tx <openTx> --fill-tx <fillTx> " +
-        "[--protocol erc7683] [--dest-chain <c>] [--finality-depth 12] [--json]\n" +
-        "(auto-discovery of the fill tx is on the roadmap)",
+        "[--protocol erc7683|across|cow] [--dest-chain <c>] [--finality-depth 12] [--json]\n" +
+        "(for CoW, intent-tx and fill-tx are the same settlement tx; auto-discovery is on the roadmap)",
     );
   }
 
@@ -30,7 +30,7 @@ export async function settlement(args: string[]): Promise<void> {
     label: "intent receipt",
   });
   if (!intentReceipt) throw new Error(`intent tx not found on ${src.name}: ${o.intentTx}`);
-  const order = proto.parseIntent(intentReceipt.logs);
+  const order = proto.parseIntent(intentReceipt.logs, { srcChainId: src.chainId });
   if (!order) {
     throw new Error(`no ${proto.label} intent event in ${o.intentTx} on ${src.name} — is this the order-opening tx?`);
   }

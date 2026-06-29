@@ -17,6 +17,15 @@ export interface NormalizedOrder {
 }
 
 /**
+ * Context a decoder may need beyond the logs. Cross-chain formats (ERC-7683,
+ * Across) carry the destination chain in the event; same-chain ones (CoW) don't,
+ * so the command supplies the chain the intent was observed on.
+ */
+export interface IntentContext {
+  srcChainId: number;
+}
+
+/**
  * A settlement protocol decoder. `parseIntent` reads the order-opening tx's
  * logs; `parseFill` reads the fill tx's logs into observed deliveries (default:
  * ERC-20 Transfers). Both are pure given the logs, so they unit-test offline.
@@ -25,7 +34,7 @@ export interface Protocol {
   key: string;
   /** human label, e.g. "ERC-7683". */
   label: string;
-  parseIntent(logs: readonly LogLike[]): NormalizedOrder | null;
+  parseIntent(logs: readonly LogLike[], ctx: IntentContext): NormalizedOrder | null;
   parseFill(logs: readonly LogLike[]): ObservedTransfer[];
 }
 

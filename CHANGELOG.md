@@ -34,10 +34,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pluggable `Protocol` interface (`parseIntent`/`parseFill`) under
   `src/protocols/`, selected with `--protocol` (default `erc7683`). Today's
   ERC-7683 logic moved behind it unchanged; the shared delivery-matching core is
-  reused. This is the seam the Across/UniswapX/CoW decoders plug into. Decoders
-  are pure and unit-tested (the ERC-7683 one round-trips a real ABI-encoded
-  `Open` event). Settlement reads now also use the RPC retry layer. JSON output
-  gains a `protocol` field.
+  reused. Settlement reads now also use the RPC retry layer; JSON output gains a
+  `protocol` field.
+- **Across and CoW settlement decoders**: `--protocol across` decodes the
+  SpokePool deposit event (both the modern `FundsDeposited` bytes32 shape and the
+  legacy `V3FundsDeposited`); `--protocol cow` decodes GPv2Settlement `Trade`
+  events (same-chain — pass the settlement tx as both intent and fill). ABIs are
+  from the official contracts; decoders are pure and round-trip-tested.
+  **UniswapX is intentionally not added** — its `Fill` event carries no output
+  amounts, so the promise can't be read from logs alone.
 - **Registry validation**: `npm run validate:registry` checks `bridges.json` for
   shape, unique kebab-case ids, known chains, EIP-55 **checksummed** addresses,
   and a cited source URL for any route not marked `"verified": false`. Wired into

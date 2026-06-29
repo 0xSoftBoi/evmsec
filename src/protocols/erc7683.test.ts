@@ -40,7 +40,7 @@ test("getProtocol: default resolves, unknown throws", () => {
 });
 
 test("erc7683.parseIntent: decodes Open into a normalized order", () => {
-  const order = erc7683.parseIntent([openLog()]);
+  const order = erc7683.parseIntent([openLog()], { srcChainId: 1 });
   assert.ok(order);
   assert.equal(order!.protocol, "erc7683");
   assert.equal(order!.fillDeadline, 1_900_000_000);
@@ -54,14 +54,16 @@ test("erc7683.parseIntent: decodes Open into a normalized order", () => {
 });
 
 test("erc7683.parseIntent: native (zero-address) output is flagged", () => {
-  const order = erc7683.parseIntent([openLog({ token: "0x0000000000000000000000000000000000000000" })]);
+  const order = erc7683.parseIntent([openLog({ token: "0x0000000000000000000000000000000000000000" })], {
+    srcChainId: 1,
+  });
   assert.equal(order!.outputs[0].native, true);
 });
 
 test("erc7683.parseIntent: no Open event → null", () => {
   const transfer = erc20Interface.encodeEventLog("Transfer", [ALICE, USDC, 1n]);
   const log = { address: USDC, topics: transfer.topics, data: transfer.data };
-  assert.equal(erc7683.parseIntent([log]), null);
+  assert.equal(erc7683.parseIntent([log], { srcChainId: 1 }), null);
 });
 
 test("erc7683.parseFill: decodes ERC-20 Transfers to the recipient", () => {

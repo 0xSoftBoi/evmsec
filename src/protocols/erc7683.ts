@@ -14,7 +14,7 @@ export const erc7683: Protocol = {
   key: "erc7683",
   label: "ERC-7683",
 
-  parseIntent(logs: readonly LogLike[]): NormalizedOrder | null {
+  parseIntent(logs: readonly LogLike[], _ctx): NormalizedOrder | null {
     for (const log of logs) {
       if (log.topics[0] !== OPEN_TOPIC) continue;
       const parsed = erc7683Interface.parseLog({ topics: [...log.topics], data: log.data });
