@@ -94,17 +94,26 @@ discovery keyed on `orderId` topics where a protocol emits them.
 **Acceptance.** `settlement` resolves the fill without `--fill-tx` for recent
 intents; clearly reports when it can't and falls back to manual.
 
-## 7. `settlement`: cross-chain message-proof verification **[L]**
+## 7. Cross-chain message-proof verification ✅ **shipped** (Wormhole + Hyperlane)
 
-**Why.** v1 confirms a _token delivery_, not that a _valid attested message_
-crossed. The strongest settlement guarantees come from the messaging layer.
+Confirms a _validly attested message_ crossed, not just that tokens arrived —
+shipped as the standalone `message-proof` command (the attestation is a different
+axis from intent fills, so it's its own command rather than bolted onto
+`settlement`). Each layer is one destination-chain `eth_call`:
 
-**Approach.** Per-bridge proof checks: Wormhole **VAA**, LayerZero **DVN**
-attestation, Hyperlane **ISM**/mailbox `delivered`. Set `messageVerified=true`
-only when the underlying attestation is confirmed on the destination.
+- **Wormhole** — `Core.parseAndVerifyVM(vaa)` checks the guardian signatures.
+- **Hyperlane** — `Mailbox.delivered(messageId)` (ISM-verified + executed).
 
-**Acceptance.** For a supported messaging layer, the verdict distinguishes
-"tokens arrived" from "tokens arrived _and_ the message was validly attested."
+`status = verified` only when the on-chain attestation confirms; a tampered VAA
+reads `unverified`. Verifier addresses are bundled (and were each verified live)
+for ethereum/base/arbitrum/optimism/polygon, overridable with `--contract`. The
+VAA parser + classifiers are pure and unit-tested; validated end-to-end on
+mainnet (real VAA verifies, tampered VAA rejected).
+
+⏸ **LayerZero deferred**: a specific message's DVN attestation can't be confirmed
+by a single view — it needs the message's `Origin` (srcEid, sender, nonce), the
+`payloadHash`, and the receiver's configured DVN set / verification state on the
+EndpointV2. A separate lift; the `MessageLayer` interface is ready for it.
 
 ## 8. `settlement diagnose` — why didn't this intent settle? ✅ **shipped**
 

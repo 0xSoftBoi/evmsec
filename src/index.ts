@@ -5,6 +5,7 @@ import { settlement } from "./commands/settlement.js";
 import { pqReadiness } from "./commands/pq-readiness.js";
 import { mintAuthority } from "./commands/mint-authority.js";
 import { pauseGuardian } from "./commands/pause-guardian.js";
+import { messageProof } from "./commands/message-proof.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   solvency,
@@ -13,6 +14,7 @@ const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   "pq-readiness": pqReadiness,
   "mint-authority": mintAuthority,
   "pause-guardian": pauseGuardian,
+  "message-proof": messageProof,
 };
 
 const HELP = `evmsec — a security CLI for EVM chains
@@ -29,6 +31,8 @@ commands:
                                   holds the pause key? (owner/PAUSER_ROLE)
   settlement                    did a cross-chain intent actually get filled?
                                   (--protocol erc7683 --intent-tx --fill-tx)
+  message-proof <--layer>       was a cross-chain message validly attested?
+                                  (Wormhole VAA / Hyperlane delivered)
   pq-readiness <address>        is this verifier post-quantum ready, or
                                   Shor-breakable? (ECDSA/BLS vs ML-DSA/lattice)
 
@@ -58,6 +62,8 @@ examples:
   evmsec upgradeability 0xToken --chain base
   evmsec mint-authority 0xWrappedToken --chain polygon --json
   evmsec pause-guardian 0xWrappedToken --chain polygon
+  evmsec message-proof --layer hyperlane --chain base --id 0xMessageId
+  evmsec message-proof --layer wormhole --chain ethereum --vaa 0x01000000... --json
   evmsec settlement --source-chain ethereum --intent-tx 0xOpen \\
                     --fill-tx 0xFill
   evmsec pq-readiness 0xVerifier --chain ethereum --json

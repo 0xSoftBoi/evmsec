@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`message-proof` command**: verifies that a cross-chain message was _validly
+  attested_ (not just that tokens arrived) by checking the attestation on the
+  destination via a single `eth_call` — Wormhole `Core.parseAndVerifyVM(vaa)`
+  (guardian signatures) and Hyperlane `Mailbox.delivered(messageId)` (ISM-verified
+  and executed). Exits non-zero unless verified. Core/Mailbox addresses are
+  bundled for ethereum/base/arbitrum/optimism/polygon (each verified live before
+  bundling), overridable with `--contract`. LayerZero is intentionally deferred
+  (its per-message DVN check needs full Origin/nonce context, not a view call).
+  Validated end-to-end on mainnet: a real VAA verifies, a tampered one is
+  rejected, an unknown Hyperlane id reads unverified. The pure VAA parser and
+  verdict classifiers (`message-proof-core.ts`) are unit-tested.
 - **`mint-authority <token>` command**: answers "can the wrapped supply be
   inflated, and by whom?" — the rug vector `solvency` doesn't cover. Follows the
   proxy to its implementation, scans bytecode for mint/burn/pause entrypoints, a

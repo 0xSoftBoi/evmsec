@@ -233,6 +233,33 @@ message proofs. Decoders are unit-tested offline; **validate a new protocol
 against a real settlement before trusting a number.** Treat it as a settlement
 _audit helper_, not an oracle.
 
+### `message-proof` — was the cross-chain message validly attested?
+
+`settlement` confirms a token _delivery_. The stronger guarantee is that a
+_validly attested message_ actually crossed the messaging layer. This checks the
+attestation directly on the destination chain (a single `eth_call`, no logs):
+
+| `--layer`   | check                                                        | you supply                  |
+| ----------- | ------------------------------------------------------------ | --------------------------- |
+| `hyperlane` | `Mailbox.delivered(messageId)` — passed its ISM and executed | `--id <bytes32 message id>` |
+| `wormhole`  | `Core.parseAndVerifyVM(vaa)` — guardian signatures valid     | `--vaa <0x encoded VAA>`    |
+
+```bash
+npm run evmsec -- message-proof --layer hyperlane --chain base --id 0xMessageId
+npm run evmsec -- message-proof --layer wormhole  --chain ethereum --vaa 0x01000000... --json
+```
+
+**Exit code is non-zero unless the message is confirmed verified**, so an
+unattested or unrelayed message fails a CI gate. Core Wormhole / Hyperlane
+contract addresses are bundled for ethereum, base, arbitrum, optimism, and
+polygon (each verified live before bundling); override with `--contract` for
+other chains. It distinguishes "tokens arrived" from "tokens arrived **and** the
+message was validly attested" — a tampered VAA reads `UNVERIFIED` (the guardian
+signatures fail on-chain), not a false pass. **LayerZero** isn't supported yet:
+verifying a specific message's DVN attestation needs the full Origin/nonce
+context and the receiver's configured DVN set, not a single view call (roadmap).
+The VAA parser and verdict classifiers (`message-proof-core.ts`) are unit-tested.
+
 ### `pq-readiness` — is this verifier quantum-safe, or printing forgeries later?
 
 When a large quantum computer can run Shor's algorithm, every signature scheme
@@ -295,6 +322,8 @@ src/
   registry-core.ts           pure bridges.json validator (shape, chains, checksums, sources)
   discovery-core.ts          pure fill-tx selection + getLogs range chunking
   diagnose-core.ts           pure settlement failure-mode classification
+  message-proof-core.ts      pure VAA-header parsing + attestation classifiers
+  message-layers/            per-layer attestation verifiers (Hyperlane, Wormhole)
   settlement-core.ts         pure delivery-matching + verdict logic (protocol-agnostic)
   protocols/                 pluggable settlement decoders (Protocol interface; erc7683, across, cow)
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
@@ -307,7 +336,8 @@ src/
     upgradeability.ts        EIP-1967 / legacy proxy admin risk
     mint-authority.ts        who can inflate the wrapped supply?
     pause-guardian.ts        who can freeze transfers?
-    settlement.ts            ERC-7683 cross-chain intent fill verification
+    settlement.ts            cross-chain intent fill verification (erc7683/across/cow)
+    message-proof.ts         cross-chain message attestation (Wormhole/Hyperlane)
     pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)
   index.ts                   CLI dispatcher
 bridges.json                 route registry (verify before trusting)
@@ -333,9 +363,10 @@ npm run build         # compile to dist/ (what `prepublishOnly` ships)
 ```
 
 The backing math, the multi-asset summation, the forensic bisection, the
-`--watch` transition logic, the proxy-slot parsing, the PQ / mint-authority /
-pause-guardian classifiers, the RPC retry/concurrency helpers, and the
-settlement matcher are unit-tested and run offline. Test
+`--watch` transition/degrade logic, the registry validator, the proxy-slot
+parsing, the PQ / mint-authority / pause-guardian classifiers, the settlement
+decoders + fill-discovery + diagnosis, the VAA parser / attestation classifiers,
+and the RPC retry/concurrency helpers are unit-tested and run offline. Test
 discovery is explicit (`scripts/run-tests.mjs`) so it behaves identically across
 shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
 typecheck, and build once, plus the test suite on Node 20 and 22, for every push
