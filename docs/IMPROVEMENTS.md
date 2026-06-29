@@ -53,6 +53,11 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
   carried-over round, and (on L2s, via `--sequencer`) a down/just-restarted
   sequencer. See `oracle-core.ts`. *Still open:* single-source detection (needs
   the aggregator's oracle count) and a deviation check against a second feed.
+- **`compiler-bugs`** — extracts the exact solc version from the bytecode's CBOR
+  metadata trailer and matches it against the Solidity team's bundled
+  `bugs.json` / `bugs_by_version.json` (regenerated with `npm run gen:solc-bugs`).
+  Fails CI on an unconditional high-severity bug; condition-gated bugs surface
+  their conditions and read elevated. See `compiler-core.ts`, `data/solc-bugs.ts`.
 
 ### Next (priority order)
 
@@ -62,23 +67,17 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
    AccessControl role and its members, not just the proxy admin). *Why:* the
    threshold is meaningless if a module can bypass it.
 
-2. **`compiler-bugs <address>`** — read the solc version from the contract's CBOR
-   metadata trailer (evmsec already parses CBOR for `pq-readiness`) and look it up
-   against the official solc `bugs_by_version.json`. *Why:* known-buggy compiler
-   versions (storage-corruption, ABI-encoder bugs) are a deterministic, citable
-   finding with zero false positives.
-
-4. **`delegation-safety <eoa>`** (EIP-7702) — `pq-readiness` already detects the
+2. **`delegation-safety <eoa>`** (EIP-7702) — `pq-readiness` already detects the
    `0xef0100` delegation prefix; this resolves the **delegate target** and
    classifies it (known/canonical vs unknown contract). *Why:* 7702 account
    delegation is a 2025+ phishing/drainer vector and is directly readable.
 
-5. **`verification-status <address>`** — query Sourcify v2
+3. **`verification-status <address>`** — query Sourcify v2
    (`GET /v2/contract/{chainId}/{address}` → `exact_match` / `match` / absent),
    with an Etherscan V2 API fallback. *Why:* an unverified contract holding value
    is itself a yellow flag, and this is a clean, cacheable lookup.
 
-6. **Drift / baseline track** — snapshot a contract's security-relevant state
+4. **Drift / baseline track** — snapshot a contract's security-relevant state
    (guardian set, validator/DVN set, bytecode codehash, admin) to a committed
    baseline file and **diff on each run**, failing CI on unexpected drift. *Why:*
    the snapshot-diff pattern catches silent privileged changes that point-in-time
@@ -86,7 +85,7 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
    **balance-drain tripwire** (escrow balance dropping faster than a threshold)
    and **bytecode-immutability** assertion.
 
-7. **codehash exact-match allowlist** — a small shared primitive: assert a
+5. **codehash exact-match allowlist** — a small shared primitive: assert a
    contract's `extcodehash` matches a known-good value. Underpins "this Safe is
    the canonical Gnosis singleton" and "this 7702 delegate is a vetted target."
 

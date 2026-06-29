@@ -37,6 +37,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:coverage": "node scripts/run-tests.mjs --experimental-test-coverage",
     "validate:registry": "tsx scripts/validate-registry.mjs",
+    "gen:solc-bugs": "node scripts/gen-solc-bugs.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run validate:registry && npm test",
     "prepublishOnly": "npm run clean && npm run build"
   },

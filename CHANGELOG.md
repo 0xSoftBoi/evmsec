@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`compiler-bugs <address>` command**: was this contract compiled with a solc
+  version subject to a known compiler bug? Reads the exact solc version from the
+  bytecode's CBOR metadata trailer (following the proxy to its implementation)
+  and matches it against the Solidity team's own published `bugs.json` /
+  `bugs_by_version.json` (bundled in `src/data/solc-bugs.ts`, regenerated with
+  `npm run gen:solc-bugs`). Each finding links to the official writeup. Exits
+  non-zero when a high-severity bug applies _unconditionally_ to that version;
+  condition-gated bugs (viaIR/optimizer/evmVersion) read elevated with their
+  conditions surfaced, since applicability can't always be read from bytecode. A
+  contract that strips metadata or predates CBOR tags reports "version not found"
+  rather than guessing. Pure logic (`compiler-core.ts`) is unit-tested; validated
+  live (USDC's 0.6.12 implementation, pre-CBOR WETH).
 - **`oracle-hygiene <feed>` command**: is a Chainlink-style price feed fresh and
   safe to read _right now_? Pulls `latestRoundData()` and flags the failure modes
   a consumer can't see when it blindly trusts the price — a **stale** answer

@@ -244,6 +244,33 @@ clock. **Freshness/liveness only** — this can't attest the price is _correct_ 
 sourced from enough nodes; that's a different lane. Pure logic in
 `oracle-core.ts` is unit-tested offline.
 
+### `compiler-bugs` — built with a solc version that has a known bug?
+
+Solidity ships with bugs, and the team publishes _exactly which compiler versions
+each one affects_. A contract's bytecode usually carries the exact solc version
+it was built with in its CBOR metadata trailer — so "was this compiled with a
+version subject to a known bug?" is a fully deterministic, on-chain-readable
+question.
+
+```bash
+npm run evmsec -- compiler-bugs 0xContract --chain ethereum [--json]
+```
+
+Reads the solc version from the metadata (following the proxy to its
+implementation, since that's where the logic and its compiler live) and matches
+it against the Solidity team's own `bugs.json` / `bugs_by_version.json`
+(bundled — regenerate with `npm run gen:solc-bugs`). Each finding links to the
+official writeup. **Exit code is non-zero when a high-severity bug applies
+unconditionally to that version.**
+
+Honest about the boundary: a bug being present in the compiler version is
+necessary but not always sufficient — many bugs only bite under specific compile
+settings (`viaIR`, optimizer, `evmVersion`) that aren't always readable from
+bytecode. Those condition-gated bugs read `elevated, verify` rather than a hard
+failure, and the conditions are surfaced. A contract that strips metadata, is
+Vyper/assembly, or predates CBOR tags reports "version not found" rather than
+guessing. Pure logic in `compiler-core.ts` is unit-tested offline.
+
 ### `settlement` — did the cross-chain intent actually get filled?
 
 Decode an intent on the source chain to learn what the filler _promised_ to
@@ -394,6 +421,8 @@ src/
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
   authority-core.ts          pure authority classification (EOA / Safe / timelock → verdict)
   oracle-core.ts             pure price-feed hygiene (staleness / zero / sequencer → verdict)
+  compiler-core.ts           pure solc-version extraction (CBOR) + bug-list matching
+  data/solc-bugs.ts          bundled solc bug lists (derived; npm run gen:solc-bugs)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification
   *-core.test.ts             unit tests for the pure cores (no network)
@@ -405,6 +434,7 @@ src/
     mint-authority.ts        who can inflate the wrapped supply?
     pause-guardian.ts        who can freeze transfers?
     oracle-hygiene.ts        is this price feed fresh & safe to read now?
+    compiler-bugs.ts         built with a solc version that has a known bug?
     settlement.ts            cross-chain intent fill verification (erc7683/across/cow)
     message-proof.ts         cross-chain message attestation (Wormhole/Hyperlane)
     pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)
