@@ -14,6 +14,7 @@
         "chain": "polygon",
         "token": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
       },
+      "verified": false,
       "notes": "Polygon PoS ERC20 bridge: tokens lock in the RootChainManager/predicate on L1 and a mapped child token is minted on Polygon. Addresses here are illustrative — confirm the current predicate/escrow before relying on the number."
     }
   ]

@@ -33,6 +33,12 @@ export interface Route {
   lock: LockLeg | LockLeg[];
   mint: { chain: ChainKey; token: string };
   notes?: string;
+  /**
+   * Whether this route's addresses are verified against a primary source.
+   * Defaults to true; the registry validator requires a source URL in `notes`
+   * unless this is explicitly `false` (a deliberately-illustrative entry).
+   */
+  verified?: boolean;
 }
 
 /** Normalize a route's `lock` to an array of legs (single-leg stays one entry). */

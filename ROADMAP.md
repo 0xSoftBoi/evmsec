@@ -43,17 +43,16 @@ summed — each normalized to 18 dp — against the minted supply (`sumLocked18`
 must denominate the same unit as the minted token. Still open: differently-priced
 baskets (needs a price oracle) and multiple wrapped tokens on the mint side.
 
-## 4. Community-verified `bridges.json` registry **[S]**
+## 4. Community-verified `bridges.json` registry ✅ **shipped**
 
-**Why.** The registry is only trustworthy if every address traces to a primary
-source — and that should be machine-enforced, not just documented.
-
-**Approach.** A JSON Schema for `bridges.json` + a `validate-registry` script
-wired into CI (checksummed addresses, known chains, a source URL in `notes`).
-Move routes into a `routes/` dir if it grows. PR template requiring the source.
-
-**Acceptance.** CI fails a registry PR that lacks a cited source or has a
-malformed/unchecksummed address; ships with several verified real routes.
+Machine-enforced so the registry can't silently rot. `validateRegistry`
+(`registry-core.ts`, pure + unit-tested) checks top-level shape, kebab-case
+unique ids, known chains, **EIP-55 checksummed** escrow/token addresses (single-
+and multi-leg), and that a route claiming to be verified cites a primary-source
+URL in `notes` (mark a deliberately-illustrative entry `"verified": false` to opt
+out). `npm run validate:registry` runs it; CI gates every push/PR on it. Still
+open: a JSON Schema file for editor tooling, splitting routes into a `routes/`
+dir if it grows, and seeding several verified real routes.
 
 ## 5. `settlement`: more intent formats **[L]**
 

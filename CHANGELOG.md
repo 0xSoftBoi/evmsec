@@ -30,6 +30,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Multi-asset / multi-escrow routes**: a route's `lock` may now be an array of
   legs `{chain, escrow, token}`, summed (normalized to 18 dp) against the minted
   supply. Backward-compatible with single-leg routes.
+- **Registry validation**: `npm run validate:registry` checks `bridges.json` for
+  shape, unique kebab-case ids, known chains, EIP-55 **checksummed** addresses,
+  and a cited source URL for any route not marked `"verified": false`. Wired into
+  CI so a malformed or uncited registry PR fails. Pure logic in `registry-core.ts`
+  is unit-tested. Adds an optional `verified` field to a route.
 - **`upgradeability --json`**: the command now has machine-readable output, so
   it drops into CI like the others.
 - **RPC resilience**: every on-chain read goes through a request timeout

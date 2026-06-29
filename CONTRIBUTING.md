@@ -54,6 +54,12 @@ must denominate the same unit as the minted token:
 ]
 ```
 
+Run `npm run validate:registry` before opening the PR — CI runs it too. It
+enforces unique kebab-case ids, known chains, EIP-55 **checksummed** addresses,
+and a primary-source URL in `notes`. A deliberately-illustrative entry may set
+`"verified": false` to opt out of the source-URL requirement (it is still
+structurally validated).
+
 Requirements for a route PR:
 
 1. **Cite a primary source** in `notes` for the escrow and both token addresses —

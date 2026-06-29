@@ -261,6 +261,7 @@ src/
   lib.ts                     provider cache + RPC retry/concurrency, ABIs, proxy slots, math, bisection
   lib.test.ts                unit tests for the pure logic (no network)
   solvency-core.ts           pure backing summation, breach predicate, watch transitions
+  registry-core.ts           pure bridges.json validator (shape, chains, checksums, sources)
   settlement-core.ts         pure ERC-7683 delivery-matching + verdict logic
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
@@ -293,6 +294,7 @@ npm run lint          # ESLint              ·  npm run lint:fix to autofix
 npm run typecheck     # strict tsc, no emit
 npm test              # node:test via tsx — pure logic, no network
 npm run test:coverage # the same, with V8 coverage
+npm run validate:registry  # check bridges.json (shape, chains, checksums, sources)
 npm run build         # compile to dist/ (what `prepublishOnly` ships)
 ```
 
