@@ -451,6 +451,34 @@ retry on transient errors only — timeouts, 429s, 5xx, resets — while real er
 default 5) and isolates per-route failures: one unreadable route is reported as
 `ERROR` and fails the exit code, without masking the others.
 
+## Use in CI (GitHub Action)
+
+Every check exits non-zero on a failing verdict, which is the whole point: drop
+it into a workflow and a regression fails the build. A composite action ships in
+this repo ([`action.yml`](action.yml)) — it builds evmsec from source, so it
+works without an npm release:
+
+```yaml
+# .github/workflows/security.yml
+name: security
+on: [push, schedule]
+jobs:
+  evmsec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: 0xSoftBoi/evmsec@main
+        with:
+          args: "audit 0xYourContract --chain ethereum"
+        env:
+          ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
+```
+
+Run any command via `args` — `audit 0x…`, `solvency --all`, `oracle-hygiene 0xFeed
+--chain arbitrum --sequencer 0x…`. Point an RPC env var at a reliable endpoint
+(public RPCs are rate-limited). Without the Action you can equally
+`npx tsx src/index.ts <command>` or, once published, `npx evmsec <command>` in
+any `run:` step.
+
 ## Layout
 
 ```

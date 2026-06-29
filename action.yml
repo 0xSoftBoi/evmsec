@@ -1,0 +1,38 @@
+name: "evmsec"
+description: "Run evmsec on-chain security checks in CI — bridge solvency, admin power, oracle hygiene, compiler bugs, and more."
+author: "0xSoftBoi"
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  args:
+    description: >
+      The evmsec command line to run, e.g. "audit 0xContract --chain ethereum"
+      or "solvency --all". The job fails (non-zero exit) when a check fails.
+    required: true
+  node-version:
+    description: "Node.js version to run evmsec with."
+    required: false
+    default: "20"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    # Build evmsec from this action's own checkout, so the action works without
+    # depending on an npm release. The build is cached-friendly and quick.
+    - name: Build evmsec
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        npm ci --no-audit --no-fund
+        npm run build
+
+    - name: Run evmsec
+      shell: bash
+      run: node "${{ github.action_path }}/dist/index.js" ${{ inputs.args }}

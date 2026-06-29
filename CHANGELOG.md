@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **GitHub Action** (`action.yml`): a composite action that runs any evmsec
+  command in CI via an `args` input (e.g. `audit 0xContract --chain ethereum`).
+  It builds evmsec from its own checkout, so it works today without an npm
+  release; `uses: 0xSoftBoi/evmsec@main`. A failing check fails the job. README
+  documents a ready-to-paste `security.yml` workflow.
 - **`audit <address>` meta-command**: runs every check that applies to a generic
   contract — `verification-status`, `compiler-bugs`, `upgradeability`,
   `admin-power`, `mint-authority`, `pause-guardian` — and prints one consolidated

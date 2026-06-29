@@ -96,9 +96,12 @@ The checks only matter if they're trivial to run:
   check applying to a generic contract (verification-status + compiler-bugs +
   upgradeability + admin-power + mint-authority + pause-guardian) and prints one
   consolidated report card; non-zero exit if any check fails. See `commands/audit.ts`.
-- **Publish to npm** (`npx evmsec ...`) — the build already compiles to `dist/`.
-- **GitHub Action** — `uses: 0xSoftBoi/evmsec-action` wrapping the CLI, so a repo
-  gets bridge/admin/oracle checks in CI in three lines.
+- ✅ **GitHub Action** — *shipped.* A composite `action.yml` runs any evmsec
+  command via an `args` input and builds from its own checkout, so it works
+  without an npm release (`uses: 0xSoftBoi/evmsec@main`). A failing check fails
+  the job; README documents a ready-to-paste workflow.
+- **Publish to npm** (`npx evmsec ...`) — the build already compiles to `dist/`
+  with a `bin`; this is an external publish step (needs npm auth / a release tag).
 - **Docker image** — for cron / non-Node environments.
 - **SARIF output** — so findings surface in the GitHub Security tab.
 - **Seed `bridges.json`** with several real, source-cited verified routes.
