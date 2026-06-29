@@ -9,6 +9,7 @@ import { messageProof } from "./commands/message-proof.js";
 import { adminPower } from "./commands/admin-power.js";
 import { oracleHygiene } from "./commands/oracle-hygiene.js";
 import { compilerBugs } from "./commands/compiler-bugs.js";
+import { verificationStatus } from "./commands/verification-status.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   solvency,
@@ -16,6 +17,7 @@ const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   "admin-power": adminPower,
   "oracle-hygiene": oracleHygiene,
   "compiler-bugs": compilerBugs,
+  "verification-status": verificationStatus,
   settlement,
   "pq-readiness": pqReadiness,
   "mint-authority": mintAuthority,
@@ -41,6 +43,7 @@ commands:
                                   (staleness vs heartbeat, zero answer, L2 sequencer)
   compiler-bugs <address>       was it built with a solc version that has a
                                   known compiler bug? (reads version from metadata)
+  verification-status <addr>    is this contract's source verified? (Sourcify)
   settlement                    did a cross-chain intent actually get filled?
                                   (--protocol erc7683 --intent-tx --fill-tx)
   message-proof <--layer>       was a cross-chain message validly attested?
@@ -78,6 +81,7 @@ examples:
   evmsec oracle-hygiene 0xFeed --chain ethereum --heartbeat 3600
   evmsec oracle-hygiene 0xFeed --chain arbitrum --sequencer 0xSeqUptimeFeed
   evmsec compiler-bugs 0xContract --chain ethereum --json
+  evmsec verification-status 0xContract --chain ethereum
   evmsec message-proof --layer hyperlane --chain base --id 0xMessageId
   evmsec message-proof --layer wormhole --chain ethereum --vaa 0x01000000... --json
   evmsec settlement --source-chain ethereum --intent-tx 0xOpen \\

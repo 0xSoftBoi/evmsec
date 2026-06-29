@@ -271,6 +271,24 @@ failure, and the conditions are surfaced. A contract that strips metadata, is
 Vyper/assembly, or predates CBOR tags reports "version not found" rather than
 guessing. Pure logic in `compiler-core.ts` is unit-tested offline.
 
+### `verification-status` — is this contract's source verified?
+
+A contract holding value whose source isn't verified anywhere is a yellow flag in
+its own right: nobody can review what the bytecode actually does, and every other
+evmsec check is working from bytecode alone.
+
+```bash
+npm run evmsec -- verification-status 0xContract --chain ethereum [--json]
+```
+
+Queries Sourcify v2 (`GET /v2/contract/{chainId}/{address}`) and classifies the
+result: a full **exact match**, a **partial match** (bytecode matches but the
+metadata hash differs — functionally verified), or **unverified**. **Exit code is
+non-zero when no verified source is found.** A provider that's unreachable reads
+`unknown` (a network condition, not a verdict) and does _not_ fail CI. Override
+the server with `--sourcify <url>`; the HTTP timeout is `EVMSEC_HTTP_TIMEOUT_MS`.
+Pure classification (`verification-core.ts`) is unit-tested offline.
+
 ### `settlement` — did the cross-chain intent actually get filled?
 
 Decode an intent on the source chain to learn what the filler _promised_ to
@@ -423,6 +441,7 @@ src/
   oracle-core.ts             pure price-feed hygiene (staleness / zero / sequencer → verdict)
   compiler-core.ts           pure solc-version extraction (CBOR) + bug-list matching
   data/solc-bugs.ts          bundled solc bug lists (derived; npm run gen:solc-bugs)
+  verification-core.ts       pure source-verification verdict (Sourcify match → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification
   *-core.test.ts             unit tests for the pure cores (no network)
@@ -435,6 +454,7 @@ src/
     pause-guardian.ts        who can freeze transfers?
     oracle-hygiene.ts        is this price feed fresh & safe to read now?
     compiler-bugs.ts         built with a solc version that has a known bug?
+    verification-status.ts   is this contract's source verified? (Sourcify)
     settlement.ts            cross-chain intent fill verification (erc7683/across/cow)
     message-proof.ts         cross-chain message attestation (Wormhole/Hyperlane)
     pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)

@@ -58,6 +58,10 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
   `bugs.json` / `bugs_by_version.json` (regenerated with `npm run gen:solc-bugs`).
   Fails CI on an unconditional high-severity bug; condition-gated bugs surface
   their conditions and read elevated. See `compiler-core.ts`, `data/solc-bugs.ts`.
+- **`verification-status`** — queries Sourcify v2 and classifies the result as an
+  exact match, a partial match, or unverified (fails CI); an unreachable provider
+  reads `unknown` rather than failing. See `verification-core.ts`. *Still open:*
+  an Etherscan V2 API fallback (needs a user-supplied key).
 
 ### Next (priority order)
 
@@ -72,12 +76,7 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
    classifies it (known/canonical vs unknown contract). *Why:* 7702 account
    delegation is a 2025+ phishing/drainer vector and is directly readable.
 
-3. **`verification-status <address>`** — query Sourcify v2
-   (`GET /v2/contract/{chainId}/{address}` → `exact_match` / `match` / absent),
-   with an Etherscan V2 API fallback. *Why:* an unverified contract holding value
-   is itself a yellow flag, and this is a clean, cacheable lookup.
-
-4. **Drift / baseline track** — snapshot a contract's security-relevant state
+3. **Drift / baseline track** — snapshot a contract's security-relevant state
    (guardian set, validator/DVN set, bytecode codehash, admin) to a committed
    baseline file and **diff on each run**, failing CI on unexpected drift. *Why:*
    the snapshot-diff pattern catches silent privileged changes that point-in-time
@@ -85,7 +84,7 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
    **balance-drain tripwire** (escrow balance dropping faster than a threshold)
    and **bytecode-immutability** assertion.
 
-5. **codehash exact-match allowlist** — a small shared primitive: assert a
+4. **codehash exact-match allowlist** — a small shared primitive: assert a
    contract's `extcodehash` matches a known-good value. Underpins "this Safe is
    the canonical Gnosis singleton" and "this 7702 delegate is a vetted target."
 

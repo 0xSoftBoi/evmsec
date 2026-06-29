@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`verification-status <address>` command**: is the contract's source verified?
+  Queries Sourcify v2 (`GET /v2/contract/{chainId}/{address}`) and classifies the
+  result as a full **exact match**, a **partial match** (bytecode matches but the
+  metadata hash differs — functionally verified), or **unverified**. Exits
+  non-zero when no verified source is found; a provider that's unreachable reads
+  `unknown` (a network condition, not a verdict) and does not fail CI. Server
+  overridable with `--sourcify`, HTTP timeout via `EVMSEC_HTTP_TIMEOUT_MS`. Pure
+  classification (`verification-core.ts`) is unit-tested; validated live against
+  Sourcify.
 - **`compiler-bugs <address>` command**: was this contract compiled with a solc
   version subject to a known compiler bug? Reads the exact solc version from the
   bytecode's CBOR metadata trailer (following the proxy to its implementation)
