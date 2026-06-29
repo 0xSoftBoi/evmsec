@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`audit <address>` meta-command**: runs every check that applies to a generic
+  contract — `verification-status`, `compiler-bugs`, `upgradeability`,
+  `admin-power`, `mint-authority`, `pause-guardian` — and prints one consolidated
+  report card with a pass/fail per check and an overall verdict. Exits non-zero if
+  any check fails, so `evmsec audit 0x… || alert` covers the lot in one CI line.
+  `oracle-hygiene` is intentionally excluded (it only applies to price feeds and
+  would revert on a generic contract).
 - **`verification-status <address>` command**: is the contract's source verified?
   Queries Sourcify v2 (`GET /v2/contract/{chainId}/{address}`) and classifies the
   result as a full **exact match**, a **partial match** (bytecode matches but the

@@ -40,6 +40,36 @@ npm run evmsec -- <command> [args]
 # or: npx tsx src/index.ts <command> [args]
 ```
 
+### `audit` — run every applicable check, one report card
+
+The fastest way in: point `audit` at any contract and it runs every check that
+applies to a generic contract — source verification, compiler-bug exposure,
+upgradeability, admin power, mint authority, and pause guardian — then prints a
+single report card with a pass/fail per check and an overall verdict.
+
+```bash
+npm run evmsec -- audit 0xContract --chain ethereum
+```
+
+```
+  Report card — 0x… on Ethereum
+  ────────────────────────────────────────
+  ✓ pass     verification-status
+  ✓ pass     compiler-bugs
+  ✓ pass     upgradeability
+  ✗ FAIL     admin-power
+  ✓ pass     mint-authority
+  ✗ FAIL     pause-guardian
+  ────────────────────────────────────────
+  OVERALL: ✗ at least one check flagged a critical/blocking finding above.
+```
+
+**Exit code is non-zero if any check fails**, so `evmsec audit 0x… || alert`
+covers the lot in one CI line. `oracle-hygiene` is intentionally excluded (it
+only applies to price feeds and would revert on a generic contract — run it
+explicitly). Each check still prints its full section above the card. It's a
+heuristic aggregate of on-chain reads, not a substitute for an audit.
+
 ### `solvency` — is the bridge backed?
 
 ```bash
@@ -447,6 +477,7 @@ src/
   *-core.test.ts             unit tests for the pure cores (no network)
   bridges.ts                 route registry loader
   commands/
+    audit.ts                 meta-command: run every applicable check → report card
     solvency.ts              flagship: lock-vs-mint backing check
     upgradeability.ts        EIP-1967 / legacy proxy admin risk
     admin-power.ts           what kind of authority controls it (EOA/Safe/timelock)?

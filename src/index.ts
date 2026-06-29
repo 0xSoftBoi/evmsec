@@ -10,8 +10,10 @@ import { adminPower } from "./commands/admin-power.js";
 import { oracleHygiene } from "./commands/oracle-hygiene.js";
 import { compilerBugs } from "./commands/compiler-bugs.js";
 import { verificationStatus } from "./commands/verification-status.js";
+import { audit } from "./commands/audit.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
+  audit,
   solvency,
   upgradeability,
   "admin-power": adminPower,
@@ -30,6 +32,8 @@ const HELP = `evmsec — a security CLI for EVM chains
 usage: evmsec <command> [args]
 
 commands:
+  audit <address>               run every applicable check on a contract and
+                                  print one report card (non-zero if any fails)
   solvency <route-id|--all>     is a lock-and-mint bridge fully backed?
                                   (locked collateral ≥ wrapped supply minted)
   upgradeability <address>      EIP-1967 proxy check: upgradeable? who controls it?
@@ -70,6 +74,7 @@ global:
 exit code is non-zero when a bridge is undercollateralized — drop it in a cron.
 
 examples:
+  evmsec audit 0xContract --chain ethereum         # one report card, every check
   evmsec solvency --all
   evmsec solvency my-route --since 2024-01-01      # when did backing break?
   evmsec solvency --lock-chain ethereum --escrow 0xEsc --token 0xUSDC \\

@@ -92,14 +92,15 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
 
 The checks only matter if they're trivial to run:
 
+- ✅ **`evmsec audit <address>`** — *shipped.* A meta-command that runs every
+  check applying to a generic contract (verification-status + compiler-bugs +
+  upgradeability + admin-power + mint-authority + pause-guardian) and prints one
+  consolidated report card; non-zero exit if any check fails. See `commands/audit.ts`.
 - **Publish to npm** (`npx evmsec ...`) — the build already compiles to `dist/`.
 - **GitHub Action** — `uses: 0xSoftBoi/evmsec-action` wrapping the CLI, so a repo
   gets bridge/admin/oracle checks in CI in three lines.
 - **Docker image** — for cron / non-Node environments.
 - **SARIF output** — so findings surface in the GitHub Security tab.
-- **`evmsec audit <address>`** — a meta-command that runs every applicable check
-  (upgradeability + admin-power + mint-authority + pause-guardian + oracle +
-  verification + compiler-bugs) and prints one consolidated report card.
 - **Seed `bridges.json`** with several real, source-cited verified routes.
 
 ## Validation debt
