@@ -16,7 +16,7 @@ import {
   withRetry,
 } from "../lib.js";
 import { Route, LockLeg, loadRoutes, findRoute, lockLegs } from "../bridges.js";
-import { sumLocked18, isRouteFailing, computeTransitions } from "../solvency-core.js";
+import { sumLocked18, isRouteFailing, computeTransitions, computeDegrades } from "../solvency-core.js";
 
 /** How many routes `--all` checks at once (override via EVMSEC_CONCURRENCY). */
 const ROUTE_CONCURRENCY = Number(process.env.EVMSEC_CONCURRENCY) || 5;
@@ -97,6 +97,7 @@ function checkAll(routes: Route[]): Promise<SolvencyResult[]> {
 async function watch(routes: Route[], opts: Opts): Promise<void> {
   const intervalMs = Math.max(5, opts.intervalSec) * 1000;
   const state = new Map<string, boolean>();
+  const ratios = new Map<string, number | null>();
   let stop = false;
   const onSignal = (): void => {
     stop = true;
@@ -106,23 +107,50 @@ async function watch(routes: Route[], opts: Opts): Promise<void> {
 
   console.error(
     `watching ${routes.length} route(s) every ${opts.intervalSec}s ` +
-      `(min-ratio ${opts.minRatio}%)${opts.webhook ? ", webhook on" : ""} — Ctrl-C to stop`,
+      `(min-ratio ${opts.minRatio}%${opts.delta !== undefined ? `, delta ${opts.delta}pp` : ""})` +
+      `${opts.webhook ? ", webhook on" : ""} — Ctrl-C to stop`,
   );
 
   while (!stop) {
     const results = await checkAll(routes);
+    const byId = new Map(results.map((r) => [r.id, r]));
+
     const current = results.map((r) => ({ id: r.id, failing: isRouteFailing(r, opts.minRatio) }));
     const transitions = computeTransitions(state, current);
     for (const c of current) state.set(c.id, c.failing);
     for (const t of transitions) {
-      const r = results.find((x) => x.id === t.id);
+      const r = byId.get(t.id);
       if (r) await emitAlert(t.kind, r, opts);
     }
+
+    // Degrade alerts: a sudden drop in backing, even while still above threshold.
+    if (opts.delta !== undefined) {
+      const degrades = computeDegrades(ratios, results, opts.delta);
+      for (const d of degrades) {
+        const r = byId.get(d.id);
+        if (r) await emitDegrade(d.from, d.to, r, opts);
+      }
+    }
+    for (const r of results) ratios.set(r.id, r.ratioPct);
+
     if (stop) break;
     await sleepInterruptible(intervalMs, () => stop);
   }
 
   console.error("\nstopped.");
+}
+
+async function emitDegrade(from: number, to: number, r: SolvencyResult, opts: Opts): Promise<void> {
+  const at = new Date().toISOString();
+  const drop = (from - to).toFixed(2);
+  if (opts.json) {
+    console.log(JSON.stringify({ event: "degrade", at, from, to, ...r }));
+  } else {
+    console.log(
+      `📉 ${at}  DEGRADE    ${r.bridge} — ${r.asset} [${r.id}]  backing ${from.toFixed(2)}% → ${to.toFixed(2)}% (−${drop}pp)`,
+    );
+  }
+  if (opts.webhook) await postWebhook(opts.webhook, { event: "degrade", at, from, to, ...r });
 }
 
 async function emitAlert(kind: "breach" | "recovery", r: SolvencyResult, opts: Opts): Promise<void> {
@@ -503,6 +531,7 @@ interface Opts {
   watch: boolean;
   intervalSec: number;
   webhook?: string;
+  delta?: number;
   adHoc?: Route;
 }
 
@@ -533,6 +562,9 @@ function parse(args: string[]): Opts {
         break;
       case "--webhook":
         opts.webhook = args[++i];
+        break;
+      case "--delta":
+        opts.delta = Number(args[++i]);
         break;
       case "--lock-chain":
         adHoc.lockChain = args[++i];

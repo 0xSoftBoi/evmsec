@@ -56,3 +56,31 @@ export function computeTransitions(
   }
   return out;
 }
+
+export interface Degrade {
+  id: string;
+  from: number;
+  to: number;
+}
+
+/**
+ * Detect routes whose backing dropped by at least `deltaPct` points since the
+ * previous observation — a sudden degradation worth alerting on even while still
+ * above the breach threshold. Compared against the immediately-previous reading
+ * (which the caller then updates), so a single drop alerts once.
+ */
+export function computeDegrades(
+  prev: Map<string, number | null>,
+  current: Array<{ id: string; ratioPct: number | null }>,
+  deltaPct: number,
+): Degrade[] {
+  const out: Degrade[] = [];
+  for (const c of current) {
+    if (c.ratioPct === null) continue;
+    const was = prev.get(c.id);
+    if (typeof was === "number" && was - c.ratioPct >= deltaPct) {
+      out.push({ id: c.id, from: was, to: c.ratioPct });
+    }
+  }
+  return out;
+}

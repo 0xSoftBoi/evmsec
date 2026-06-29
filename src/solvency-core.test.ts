@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sumLocked18, isRouteFailing, computeTransitions } from "./solvency-core.js";
+import { sumLocked18, isRouteFailing, computeTransitions, computeDegrades } from "./solvency-core.js";
 
 test("sumLocked18: sums legs normalized to 18 dp", () => {
   const one = 10n ** 18n;
@@ -51,6 +51,28 @@ test("computeTransitions: healthy → breach fires", () => {
   const prev = new Map([["a", false]]);
   const t = computeTransitions(prev, [{ id: "a", failing: true }]);
   assert.deepEqual(t, [{ id: "a", kind: "breach" }]);
+});
+
+test("computeDegrades: fires when backing drops by >= delta points", () => {
+  const prev = new Map<string, number | null>([["a", 130]]);
+  const d = computeDegrades(prev, [{ id: "a", ratioPct: 100 }], 20);
+  assert.deepEqual(d, [{ id: "a", from: 130, to: 100 }]);
+});
+
+test("computeDegrades: a smaller drop does not fire", () => {
+  const prev = new Map<string, number | null>([["a", 105]]);
+  assert.deepEqual(computeDegrades(prev, [{ id: "a", ratioPct: 100 }], 20), []);
+});
+
+test("computeDegrades: an increase or first sighting does not fire", () => {
+  assert.deepEqual(computeDegrades(new Map(), [{ id: "a", ratioPct: 50 }], 10), []);
+  const prev = new Map<string, number | null>([["a", 100]]);
+  assert.deepEqual(computeDegrades(prev, [{ id: "a", ratioPct: 120 }], 10), []);
+});
+
+test("computeDegrades: null current ratio (no supply) is skipped", () => {
+  const prev = new Map<string, number | null>([["a", 100]]);
+  assert.deepEqual(computeDegrades(prev, [{ id: "a", ratioPct: null }], 10), []);
 });
 
 test("computeTransitions: handles a mix across routes", () => {

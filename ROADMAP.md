@@ -19,9 +19,9 @@ under a single EOA. Pure classification logic is unit-tested.
 
 Follow-ups since shipped: ✅ `MINTER_ROLE` holders are now enumerated
 (AccessControlEnumerable, or `RoleGranted` history as a fallback) and classified
-EOA vs contract; ✅ a supply cap (`cap()` / `maxSupply()`) is detected and read.
-Still open: resolve a `masterMinter`-style indirection where minting isn't gated
-by `owner()`.
+EOA vs contract; ✅ a supply cap (`cap()` / `maxSupply()`) is detected and read;
+✅ a FiatToken `masterMinter()` indirection is resolved and classified (it, not
+`owner()`, gates minting). No major follow-ups outstanding.
 
 A sibling check, **`pause-guardian <token>`**, also shipped: who can freeze
 transfers, is the token paused now, and is the pause key a single EOA.
@@ -32,8 +32,9 @@ A lightweight self-hosted alternative to managed monitoring (Hexagate, Forta, OZ
 Defender). `evmsec solvency --all --watch --interval 60 [--webhook URL]` polls on
 an interval and fires **once per breach transition** (de-duped via
 `computeTransitions` in `solvency-core.ts`), recovering quietly; clean shutdown
-on SIGINT/SIGTERM. Still open: subscribe to escrow `Transfer` / supply-change
-events instead of polling, and a `--delta` degrade threshold.
+on SIGINT/SIGTERM. ✅ `--delta <pp>` now also alerts on a sudden backing drop
+between observations. Still open: subscribe to escrow `Transfer` / supply-change
+events instead of polling (push, not poll).
 
 ## 3. Multi-asset bridges — sum escrows across many tokens ✅ **shipped**
 

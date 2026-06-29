@@ -39,6 +39,7 @@ solvency flags:
   --watch                       poll continuously; alert once per breach transition
   --interval <sec>              --watch poll interval (default 60)
   --webhook <url>               --watch: POST a JSON alert on each transition
+  --delta <pp>                  --watch: also alert on a sudden backing drop (points)
   --min-ratio <pct>             alert threshold (default 100)
   --json                        machine-readable output (for CI / monitoring)
   ad-hoc:  --lock-chain <c> --escrow 0x.. --token 0x.. --mint-chain <c> --minted 0x..

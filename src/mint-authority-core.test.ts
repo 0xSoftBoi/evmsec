@@ -125,6 +125,43 @@ test("classifyMintAuthority: AccessControl with zero current minters → info", 
   assert.ok(v.summary.includes("no address currently holds MINTER_ROLE"));
 });
 
+test("classifyMintSurface: masterMinter() sets hasMasterMinter", () => {
+  const MM = "35d99f35"; // masterMinter()
+  const s = classifyMintSurface(dispatcher(MINT, MM));
+  assert.equal(s.hasMasterMinter, true);
+});
+
+test("classifyMintAuthority: masterMinter EOA → critical, takes precedence over owner", () => {
+  const MM = "35d99f35";
+  const s = classifyMintSurface(dispatcher(MINT, OWNER, MM));
+  const v = classifyMintAuthority(s, "contract", "0x00000000000000000000000000000000000000C0", undefined, {
+    address: "0x00000000000000000000000000000000000000A1",
+    kind: "eoa",
+  });
+  assert.equal(v.risk, "critical");
+  assert.equal(v.fail, true);
+  assert.ok(v.summary.includes("masterMinter"));
+});
+
+test("classifyMintAuthority: masterMinter contract → elevated", () => {
+  const MM = "35d99f35";
+  const s = classifyMintSurface(dispatcher(MINT, MM));
+  const v = classifyMintAuthority(s, "unknown", null, undefined, {
+    address: "0x00000000000000000000000000000000000000C0",
+    kind: "contract",
+  });
+  assert.equal(v.risk, "elevated");
+  assert.equal(v.fail, false);
+});
+
+test("classifyMintAuthority: masterMinter present but unresolved → elevated", () => {
+  const MM = "35d99f35";
+  const s = classifyMintSurface(dispatcher(MINT, MM));
+  const v = classifyMintAuthority(s, "unknown", null, undefined, null);
+  assert.equal(v.risk, "elevated");
+  assert.ok(v.summary.includes("couldn't be read"));
+});
+
 test("classifyMintSurface: supply cap getter sets capped", () => {
   const CAP = "355274ea"; // cap()
   const s = classifyMintSurface(dispatcher(MINT, CAP));

@@ -84,11 +84,13 @@ price oracle and is deliberately out of scope.
 #### `solvency --watch` — alert the moment backing breaks
 
 Poll the routes on an interval and alert **once per breach transition** (a route
-going under, or recovering) — steady state is silent, so it won't spam. Optional
-`--webhook` POSTs a JSON alert; clean shutdown on Ctrl-C.
+going under, or recovering) — steady state is silent, so it won't spam. Add
+`--delta <pp>` to also alert on a **sudden drop** in backing (by that many
+points) even while a route is still above the threshold. Optional `--webhook`
+POSTs a JSON alert; clean shutdown on Ctrl-C.
 
 ```bash
-npm run evmsec -- solvency --all --watch --interval 60 --webhook https://hooks.example/bridge
+npm run evmsec -- solvency --all --watch --interval 60 --delta 5 --webhook https://hooks.example/bridge
 ```
 
 A self-hosted alternative to managed monitoring: no infra, just a process (or a
@@ -144,9 +146,10 @@ auth model (Ownable vs OpenZeppelin AccessControl). For Ownable tokens it reads
 holders** (via AccessControlEnumerable, or `RoleGranted` history as a fallback)
 and classifies each as a single **EOA** (one-key inflation risk) or a
 **contract** (multisig/timelock — inspect it). It also reads the **cap value**
-when present, so bounded inflation reads differently from uncapped. **Exit code
-is non-zero when an inflatable supply sits under a single EOA**, so it drops into
-CI alongside `solvency`:
+when present, so bounded inflation reads differently from uncapped. For
+**FiatToken** (USDC-class) tokens it resolves the `masterMinter()` that actually
+gates minting and classifies it. **Exit code is non-zero when an inflatable
+supply sits under a single EOA**, so it drops into CI alongside `solvency`:
 
 ```bash
 evmsec mint-authority 0xWrappedToken || alert "wrapped token mint is single-key controlled"
@@ -154,10 +157,9 @@ evmsec mint-authority 0xWrappedToken || alert "wrapped token mint is single-key 
 
 Honestly scoped like the others: a bytecode + on-chain-read heuristic, not a
 proof. Role enumeration is best-effort (a public RPC that caps `getLogs` ranges
-may return an incomplete set — the tool says so), and some tokens route minting
-through a separate `masterMinter` rather than `owner()` — so it flags, explains,
-and tells you to confirm the gating against source. The detection logic
-(`mint-authority-core.ts`) is unit-tested offline.
+may return an incomplete set — the tool says so). It resolves a `masterMinter`
+indirection where present, but always tells you to confirm the gating against
+source. The detection logic (`mint-authority-core.ts`) is unit-tested offline.
 
 ### `pause-guardian` — can transfers be frozen, and who holds the key?
 

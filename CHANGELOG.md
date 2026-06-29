@@ -77,6 +77,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`mint-authority` resolves a FiatToken `masterMinter`**: when a token exposes
+  `masterMinter()` (USDC-class), the tool reads and classifies it (the
+  masterMinter, not `owner()`, gates minting) and the verdict reflects it — an
+  EOA masterMinter is critical. Adds a `hasMasterMinter` surface flag and a
+  `masterMinter` field to the output.
+- **`solvency --watch --delta <pp>`**: also alert on a sudden backing drop of at
+  least that many points between observations, even while a route is still above
+  the breach threshold. Degrade detection (`computeDegrades`) is unit-tested.
 - **`solvency --all` runs routes with bounded concurrency** (`EVMSEC_CONCURRENCY`,
   default 5) instead of strictly sequentially, and isolates per-route failures:
   an unreadable route is reported as `ERROR` and fails the exit code without

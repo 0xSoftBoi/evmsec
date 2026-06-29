@@ -17,6 +17,7 @@ import {
 import { OwnerKind, RoleHolder, classifyMintAuthority, classifyMintSurface } from "../mint-authority-core.js";
 
 const CAP_ABI = ["function cap() view returns (uint256)", "function maxSupply() view returns (uint256)"];
+const MASTER_MINTER_ABI = ["function masterMinter() view returns (address)"];
 
 /**
  * `evmsec mint-authority <token> [--chain ethereum] [--json]`
@@ -87,7 +88,21 @@ export async function mintAuthority(args: string[]): Promise<void> {
   // Best-effort read of the supply cap value, if the surface advertised one.
   const cap = surface.capped ? await readCap(provider, target) : null;
 
-  const verdict = classifyMintAuthority(surface, ownerKind, owner, minters);
+  // FiatToken (USDC-class): resolve the masterMinter that actually gates minting.
+  let masterMinter: RoleHolder | null = null;
+  if (surface.hasMasterMinter) {
+    try {
+      const raw = (await withRetry(() => new Contract(target, MASTER_MINTER_ABI, provider).masterMinter(), {
+        label: "masterMinter()",
+      })) as string;
+      const addr = requireAddress(raw, "masterMinter");
+      masterMinter = { address: addr, kind: await addressKind(provider, addr) };
+    } catch {
+      masterMinter = null;
+    }
+  }
+
+  const verdict = classifyMintAuthority(surface, ownerKind, owner, minters, masterMinter);
 
   if (json) {
     console.log(
@@ -105,6 +120,7 @@ export async function mintAuthority(args: string[]): Promise<void> {
           mintEntrypoints: surface.mintEntrypoints,
           owner,
           ownerKind,
+          masterMinter,
           minters: verdict.minters ?? null,
           minterNote: minterNote ?? null,
           risk: verdict.risk,
@@ -177,6 +193,12 @@ function print(
   if (v.owner) console.log(`  owner           ${v.owner}  → ${OWNER_LABEL[v.ownerKind]}`);
   else if (s.authModel === "ownable" || s.authModel === "ownable+access-control")
     console.log(`  owner           ${OWNER_LABEL[v.ownerKind]}`);
+  if (s.hasMasterMinter) {
+    const mm = v.masterMinter;
+    console.log(
+      `  masterMinter    ${mm ? `${mm.address}  → ${mm.kind === "eoa" ? "EOA (single key)" : "contract"}` : "present (unreadable)"}`,
+    );
+  }
   if (v.minters) {
     if (v.minters.length === 0) console.log(`  MINTER_ROLE     no current holders`);
     else

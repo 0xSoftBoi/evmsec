@@ -30,6 +30,8 @@ interface KnownSelector {
   burns?: boolean;
   /** A supply-cap getter = inflation is bounded. */
   caps?: boolean;
+  /** A FiatToken-style masterMinter() = minting is gated by a separate role. */
+  masterMinter?: boolean;
 }
 
 // Selectors are first-4-bytes of keccak256(signature); values are verified in the
@@ -48,6 +50,7 @@ export const MINT_SELECTORS: KnownSelector[] = [
   { selector: "8456cb59", label: "pause()", pausable: true },
   { selector: "355274ea", label: "cap() (ERC20Capped)", caps: true },
   { selector: "d5abeb01", label: "maxSupply()", caps: true },
+  { selector: "35d99f35", label: "masterMinter() (FiatToken)", masterMinter: true },
   { selector: "42966c68", label: "burn(uint256)", burns: true },
   { selector: "79cc6790", label: "burnFrom(address,uint256)", burns: true },
 ];
@@ -96,6 +99,8 @@ export interface MintSurface {
   pausable: boolean;
   /** a supply-cap getter (cap()/maxSupply()) is present — inflation is bounded. */
   capped: boolean;
+  /** a FiatToken-style masterMinter() is present — minting is gated by it, not owner(). */
+  hasMasterMinter: boolean;
   authModel: AuthModel;
   mintEntrypoints: string[]; // human labels of mint functions found
   indicators: string[];
@@ -109,6 +114,7 @@ export function classifyMintSurface(bytecode: string): MintSurface {
   const burnable = found.some((f) => f.burns);
   const pausable = found.some((f) => f.pausable);
   const capped = found.some((f) => f.caps);
+  const hasMasterMinter = found.some((f) => f.masterMinter);
   const ownable = found.some((f) => f.ownable);
   const accessControl = found.some((f) => f.accessControl);
 
@@ -128,9 +134,11 @@ export function classifyMintSurface(bytecode: string): MintSurface {
     indicators.push("OpenZeppelin AccessControl — minting is likely gated by a role (e.g. MINTER_ROLE)");
   if (ownable) indicators.push("Ownable owner() present — privileged actions gated by a single owner");
   if (capped) indicators.push("supply-cap getter present — minting is bounded by a cap (confirm the cap value)");
+  if (hasMasterMinter)
+    indicators.push("FiatToken masterMinter() present — minting is gated by the masterMinter, not owner()");
   if (pausable) indicators.push("pausable — transfers can be frozen by the pause authority");
 
-  return { mintable, burnable, pausable, capped, authModel, mintEntrypoints, indicators };
+  return { mintable, burnable, pausable, capped, hasMasterMinter, authModel, mintEntrypoints, indicators };
 }
 
 /** A resolved holder of a role (e.g. MINTER_ROLE), classified by address kind. */
@@ -147,6 +155,8 @@ export interface MintAuthorityVerdict {
   owner: string | null;
   /** resolved MINTER_ROLE holders, when the token uses AccessControl. */
   minters?: RoleHolder[];
+  /** resolved masterMinter, for FiatToken-style tokens. */
+  masterMinter?: RoleHolder | null;
   risk: MintRisk;
   /** true when CI should fail: an inflatable supply controlled by a single key. */
   fail: boolean;
@@ -169,6 +179,7 @@ export function classifyMintAuthority(
   ownerKind: OwnerKind,
   owner: string | null,
   minters?: RoleHolder[],
+  masterMinter?: RoleHolder | null,
 ): MintAuthorityVerdict {
   const isAccessControl = surface.authModel === "access-control" || surface.authModel === "ownable+access-control";
   const capNote = surface.capped ? " Inflation is bounded by a supply cap — confirm the cap value." : "";
@@ -176,9 +187,23 @@ export function classifyMintAuthority(
   let summary: string;
   let fail = false;
 
-  if (!surface.mintable && !isAccessControl) {
+  if (!surface.mintable && !isAccessControl && !surface.hasMasterMinter) {
     risk = "info";
     summary = "no mint entrypoint detected — supply may be fixed; confirm against source.";
+  } else if (surface.hasMasterMinter) {
+    // FiatToken (USDC-class): mint is gated by the masterMinter, which configures
+    // minters — not by owner() or OZ roles. This takes precedence.
+    if (!masterMinter) {
+      risk = "elevated";
+      summary = `minting is gated by a FiatToken masterMinter that couldn't be read — resolve and verify it is a controller/multisig.${capNote}`;
+    } else if (masterMinter.kind === "eoa") {
+      risk = "critical";
+      fail = true;
+      summary = `minting is gated by a masterMinter held by a single EOA (${masterMinter.address}) — it can authorize unlimited minters.${capNote}`;
+    } else {
+      risk = "elevated";
+      summary = `minting is gated by a masterMinter contract (${masterMinter.address}) — likely a controller/multisig; inspect it.${capNote}`;
+    }
   } else if (isAccessControl) {
     const eoaMinters = (minters ?? []).filter((m) => m.kind === "eoa");
     if (eoaMinters.length) {
@@ -217,5 +242,5 @@ export function classifyMintAuthority(
     summary = `a mint entrypoint exists but the controlling authority couldn't be determined — verify from source.${capNote}`;
   }
 
-  return { surface, ownerKind, owner, minters, risk, fail, summary };
+  return { surface, ownerKind, owner, minters, masterMinter, risk, fail, summary };
 }
