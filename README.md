@@ -207,14 +207,18 @@ late fills, and underfills.
 
 Honestly scoped. Each decoder reads the protocol's own deposit/trade event (ABIs
 from the official contracts) and verifies ERC-20 deliveries via Transfer logs;
-native-token outputs are flagged, not proven. Limits: **UniswapX** isn't
-supported — its `Fill` event carries no output amounts, so the promise can't be
-read from logs alone (it needs the signed order / calldata — roadmap). CoW
-verifies delivery to the order `owner` (the `Trade` event omits an optional
-`receiver`). It does **not** cryptographically verify cross-chain message proofs,
-and you supply the `--fill-tx` (auto-discovery is on the roadmap). Decoders are
-unit-tested offline; **validate a new protocol against a real settlement before
-trusting a number.** Treat it as a settlement _audit helper_, not an oracle.
+native-token outputs are flagged, not proven. **Omit `--fill-tx` to
+auto-discover it**: the tool scans the last `--scan-blocks` (default 50k) of the
+destination for the matching delivery (chunked to survive node `getLogs` caps)
+and picks the earliest tx that satisfies the output — falling back to a clear
+message when it can't, so you can pass `--fill-tx` or widen the window. Limits:
+**UniswapX** isn't supported — its `Fill` event carries no output amounts, so the
+promise can't be read from logs alone (it needs the signed order / calldata —
+roadmap). CoW verifies delivery to the order `owner` (the `Trade` event omits an
+optional `receiver`). It does **not** cryptographically verify cross-chain
+message proofs. Decoders are unit-tested offline; **validate a new protocol
+against a real settlement before trusting a number.** Treat it as a settlement
+_audit helper_, not an oracle.
 
 ### `pq-readiness` — is this verifier quantum-safe, or printing forgeries later?
 
@@ -276,6 +280,7 @@ src/
   lib.test.ts                unit tests for the pure logic (no network)
   solvency-core.ts           pure backing summation, breach predicate, watch transitions
   registry-core.ts           pure bridges.json validator (shape, chains, checksums, sources)
+  discovery-core.ts          pure fill-tx selection + getLogs range chunking
   settlement-core.ts         pure delivery-matching + verdict logic (protocol-agnostic)
   protocols/                 pluggable settlement decoders (Protocol interface; erc7683, across, cow)
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)

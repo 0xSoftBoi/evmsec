@@ -3,6 +3,10 @@ import { ChainConfig, chain, chainById } from "../config.js";
 import { ERC20_ABI, getBlockCached, getProvider, shortAddr, txLink, withRetry } from "../lib.js";
 import { ExpectedOutput, classify, matchDelivery } from "../settlement-core.js";
 import { DEFAULT_PROTOCOL, NormalizedOrder, getProtocol } from "../protocols/index.js";
+import { FillCandidate, chunkRange, selectFillTx } from "../discovery-core.js";
+
+/** getLogs sub-range size for fill scanning (override via EVMSEC_SCAN_CHUNK). */
+const SCAN_CHUNK = Number(process.env.EVMSEC_SCAN_CHUNK) || 10_000;
 
 /**
  * `evmsec settlement --source-chain <c> --intent-tx <openTx> --fill-tx <fillTx>`
@@ -15,11 +19,11 @@ import { DEFAULT_PROTOCOL, NormalizedOrder, getProtocol } from "../protocols/ind
  */
 export async function settlement(args: string[]): Promise<void> {
   const o = parse(args);
-  if (!o.sourceChain || !o.intentTx || !o.fillTx) {
+  if (!o.sourceChain || !o.intentTx) {
     throw new Error(
-      "usage: evmsec settlement --source-chain <c> --intent-tx <openTx> --fill-tx <fillTx> " +
-        "[--protocol erc7683|across|cow] [--dest-chain <c>] [--finality-depth 12] [--json]\n" +
-        "(for CoW, intent-tx and fill-tx are the same settlement tx; auto-discovery is on the roadmap)",
+      "usage: evmsec settlement --source-chain <c> --intent-tx <openTx> [--fill-tx <fillTx>] " +
+        "[--protocol erc7683|across|cow] [--dest-chain <c>] [--scan-blocks 50000] [--finality-depth 12] [--json]\n" +
+        "(omit --fill-tx to auto-discover it on the destination; for CoW pass the settlement tx as --intent-tx)",
     );
   }
 
@@ -40,9 +44,19 @@ export async function settlement(args: string[]): Promise<void> {
 
   const destChain = resolveDestChain(o.destChain, outputs);
   const destProvider = getProvider(destChain);
+  const onDest = outputs.filter((x) => x.chainId === destChain.chainId);
 
-  const fillReceipt = await withRetry(() => destProvider.getTransactionReceipt(o.fillTx!), { label: "fill receipt" });
-  if (!fillReceipt) throw new Error(`fill tx not found on ${destChain.name}: ${o.fillTx}`);
+  // Auto-discover the fill tx on the destination when the user didn't supply one.
+  let fillTx = o.fillTx;
+  if (!fillTx) {
+    if (!o.json)
+      console.error(`no --fill-tx — scanning the last ${o.scanBlocks} ${destChain.name} blocks for the fill…`);
+    fillTx = await discoverFillTx(destChain, onDest, o.scanBlocks);
+    if (!o.json) console.error(`discovered fill tx ${fillTx}`);
+  }
+
+  const fillReceipt = await withRetry(() => destProvider.getTransactionReceipt(fillTx!), { label: "fill receipt" });
+  if (!fillReceipt) throw new Error(`fill tx not found on ${destChain.name}: ${fillTx}`);
   const transfers = proto.parseFill(fillReceipt.logs);
   const fillBlock = fillReceipt.blockNumber;
   const [fillTs, destHead] = await Promise.all([
@@ -53,7 +67,6 @@ export async function settlement(args: string[]): Promise<void> {
   const fillDeadline = order.fillDeadline;
   const deadlineMet = fillDeadline === 0 || fillTs <= fillDeadline;
 
-  const onDest = outputs.filter((x) => x.chainId === destChain.chainId);
   const decimalsCache = new Map<string, number>();
 
   const results: OutResult[] = [];
@@ -85,7 +98,7 @@ export async function settlement(args: string[]): Promise<void> {
           user: order.user,
           sourceChain: src.name,
           destChain: destChain.name,
-          fillTx: o.fillTx,
+          fillTx,
           fillBlock,
           fillDeadline,
           deadlineMet,
@@ -105,7 +118,7 @@ export async function settlement(args: string[]): Promise<void> {
       ),
     );
   } else {
-    render(proto.label, src, destChain, order, o.fillTx, fillBlock, fillTs, fillDeadline, results);
+    render(proto.label, src, destChain, order, fillTx, fillBlock, fillTs, fillDeadline, results);
   }
 
   const bad = results.some((r) => r.verdict.status !== "settled");
@@ -120,6 +133,55 @@ export async function settlement(args: string[]): Promise<void> {
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Best-effort: scan the destination chain for the tx that fills an output —
+ * ERC-20 Transfers of the expected token to the recipient, over a bounded
+ * window, chunked to survive node `getLogs` range caps. Picks the earliest tx
+ * that reaches the expected amount (selection logic in discovery-core).
+ */
+async function discoverFillTx(destChain: ChainConfig, onDest: ExpectedOutput[], scanBlocks: number): Promise<string> {
+  const target = onDest.find((o) => !o.native);
+  if (!target) {
+    throw new Error("can't auto-discover a native-token delivery from logs — pass --fill-tx explicitly");
+  }
+  const provider = getProvider(destChain);
+  const head = await withRetry(() => provider.getBlockNumber(), { label: "dest head" });
+  const from = Math.max(0, head - Math.max(1, scanBlocks));
+  const token = new Contract(target.token, ERC20_ABI, provider);
+  const filter = token.filters.Transfer(null, target.recipient);
+
+  const candidates: FillCandidate[] = [];
+  let scanned = 0;
+  for (const [lo, hi] of chunkRange(from, head, SCAN_CHUNK)) {
+    try {
+      const logs = await withRetry(() => token.queryFilter(filter, lo, hi), { label: "fill scan" });
+      for (const l of logs) {
+        const ev = l as unknown as { args: { value: bigint }; transactionHash: string; blockNumber: number };
+        candidates.push({
+          tx: ev.transactionHash,
+          block: ev.blockNumber,
+          token: target.token,
+          to: target.recipient,
+          value: ev.args.value,
+        });
+      }
+      scanned++;
+    } catch {
+      // node rejected this range (cap/timeout) — skip the chunk, keep scanning
+    }
+  }
+
+  const match = selectFillTx(target, candidates);
+  if (!match) {
+    throw new Error(
+      `auto-discovery found no fill delivering ${target.amount} of ${target.token} to ${target.recipient} on ` +
+        `${destChain.name} in the last ${scanBlocks} blocks (${scanned} range(s) scanned) — pass --fill-tx, widen ` +
+        `--scan-blocks, or point at an archive/indexer RPC.`,
+    );
+  }
+  return match.tx;
+}
 
 function resolveDestChain(destChainKey: string | undefined, outputs: ExpectedOutput[]): ChainConfig {
   if (destChainKey) return chain(destChainKey);
@@ -206,12 +268,13 @@ interface Opts {
   destChain?: string;
   intentTx?: string;
   fillTx?: string;
+  scanBlocks: number;
   finalityDepth: number;
   json: boolean;
 }
 
 function parse(args: string[]): Opts {
-  const o: Opts = { finalityDepth: 12, json: false };
+  const o: Opts = { finalityDepth: 12, scanBlocks: 50_000, json: false };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case "--protocol":
@@ -228,6 +291,9 @@ function parse(args: string[]): Opts {
         break;
       case "--fill-tx":
         o.fillTx = args[++i];
+        break;
+      case "--scan-blocks":
+        o.scanBlocks = Number(args[++i]);
         break;
       case "--finality-depth":
         o.finalityDepth = Number(args[++i]);

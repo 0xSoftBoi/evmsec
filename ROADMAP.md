@@ -80,15 +80,15 @@ match their declared ABIs; live validation was blocked here by the environment's
 **Acceptance.** Each protocol verifies a real mainnet settlement; the core
 delivery-matching logic is reused unchanged.
 
-## 6. `settlement`: auto-discovery of the fill tx **[M]**
+## 6. `settlement`: auto-discovery of the fill tx ✅ **shipped**
 
-**Why.** v1 makes the user supply `--fill-tx`. Auto-discovery is the convenience
-that makes it usable for auditing arbitrary intents.
-
-**Approach.** Given the intent's `orderId`/recipient, scan the destination for
-the matching fill (by `orderId` topic, or recipient transfer) over a bounded
-window; for production use, an optional indexer/Etherscan-API backend. Degrade
-gracefully and warn when a scan exceeds RPC log-range limits.
+Omit `--fill-tx` and the tool scans the destination over a bounded `--scan-blocks`
+window (chunked via `chunkRange` to survive node `getLogs` caps) for ERC-20
+deliveries of the expected token to the recipient, then picks the earliest tx
+that satisfies the output (`selectFillTx`, both pure + unit-tested in
+`discovery-core.ts`). Degrades to a clear message when nothing matches. Still
+open: an optional indexer/Etherscan-API backend for wide historical scans, and
+discovery keyed on `orderId` topics where a protocol emits them.
 
 **Acceptance.** `settlement` resolves the fill without `--fill-tx` for recent
 intents; clearly reports when it can't and falls back to manual.
