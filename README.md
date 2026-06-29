@@ -42,10 +42,11 @@ npm run evmsec -- <command> [args]
 
 ### `audit` — run every applicable check, one report card
 
-The fastest way in: point `audit` at any contract and it runs every check that
-applies to a generic contract — source verification, compiler-bug exposure,
-upgradeability, admin power, mint authority, and pause guardian — then prints a
-single report card with a pass/fail per check and an overall verdict.
+The fastest way in: point `audit` at any contract. It fetches the bytecode
+**once**, runs every check that applies to a generic contract — source
+verification, compiler-bug exposure, upgradeability, admin power, mint authority,
+pause guardian — and prints one report card, severity-ranked, with an overall
+verdict.
 
 ```bash
 npm run evmsec -- audit 0xContract --chain ethereum
@@ -54,21 +55,42 @@ npm run evmsec -- audit 0xContract --chain ethereum
 ```
   Report card — 0x… on Ethereum
   ────────────────────────────────────────
-  ✓ pass     verification-status
-  ✓ pass     compiler-bugs
-  ✓ pass     upgradeability
-  ✗ FAIL     admin-power
-  ✓ pass     mint-authority
-  ✗ FAIL     pause-guardian
+  ✓ ok         verification-status
+  ⚠ WARNING    compiler-bugs
+  ✗ CRITICAL   upgradeability
+  ✗ CRITICAL   admin-power
+  ⚠ WARNING    mint-authority
+  ✗ CRITICAL   pause-guardian
   ────────────────────────────────────────
-  OVERALL: ✗ at least one check flagged a critical/blocking finding above.
+  OVERALL: ✗ at least one critical finding — blocking.
 ```
 
-**Exit code is non-zero if any check fails**, so `evmsec audit 0x… || alert`
-covers the lot in one CI line. `oracle-hygiene` is intentionally excluded (it
-only applies to price feeds and would revert on a generic contract — run it
-explicitly). Each check still prints its full section above the card. It's a
-heuristic aggregate of on-chain reads, not a substitute for an audit.
+Every check is one `Check` over a shared context (`src/check.ts`,
+`src/checks/`), so the _same_ assessor drives both `evmsec admin-power` and the
+`audit` row — no duplicated logic, no `process.exitCode` snooping. That also
+means every check gets machine output for free:
+
+- `--json` — a structured aggregate (`{ overall, counts, reports[] }`) for piping.
+- `--sarif` — SARIF 2.1.0 for the [GitHub Security tab](#use-in-ci-github-action).
+- `--fail-on <severity>` — exit non-zero at `critical` (default) or `warning`.
+
+`oracle-hygiene`, `solvency`, `settlement`, and `message-proof` are intentionally
+excluded — they target a feed / route / tx-pair / VAA, not a generic contract.
+It's a heuristic aggregate of on-chain reads, not a substitute for an audit.
+
+#### What it catches
+
+These are real, on-chain-verifiable findings on live mainnet contracts — not
+contrived:
+
+- **`audit 0xA0b8…eB48` (USDC)** flags `admin-power: ✗ CRITICAL` — USDC's
+  FiatTokenProxy upgrade admin (`0x807a…95d2`) is a **single externally-owned
+  key**, not a multisig. (Verify: that address has no code.) A compromise of one
+  key can replace the implementation behind one of the largest tokens on Ethereum.
+- A **2-of-5 Safe** — the exact configuration of the Harmony Horizon bridge, drained
+  for ~$100M in 2022 when two signer keys were compromised — now reads
+  `⚠ WARNING` (a low threshold, not a passing "info"), where a naive m-of-n ≥ 2
+  check would have waved it through.
 
 ### `solvency` — is the bridge backed?
 
@@ -479,6 +501,30 @@ Run any command via `args` — `audit 0x…`, `solvency --all`, `oracle-hygiene 
 `npx tsx src/index.ts <command>` or, once published, `npx evmsec <command>` in
 any `run:` step.
 
+**Findings in the Security tab.** Every contract-audit command (`audit`,
+`admin-power`, `mint-authority`, …) takes `--sarif`, so you can surface findings
+as GitHub code-scanning alerts instead of digging through logs:
+
+```yaml
+jobs:
+  evmsec:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # required to upload SARIF
+    steps:
+      - uses: 0xSoftBoi/evmsec@main
+        with:
+          args: "audit 0xYourContract --chain ethereum --sarif > evmsec.sarif"
+        env:
+          ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: evmsec.sarif
+```
+
+Use `--fail-on warning` to make warnings (not just criticals) block the build,
+or `--json` for a structured aggregate to pipe elsewhere.
+
 ## Layout
 
 ```
@@ -503,8 +549,14 @@ src/
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification
   *-core.test.ts             unit tests for the pure cores (no network)
+  check.ts                   the check framework: Finding/Report types + human/JSON/SARIF renderers
+  checks/                    one assessor per contract-audit check (over the pure cores)
+    run.ts                   shared runner: parse → fetch bytecode once → run checks → render
+    registry.ts              the contract-audit family (what `audit` runs)
+    onchain.ts               shared on-chain reads (proxy/authority/Safe/timelock probes)
+    {upgradeability,authority,compiler,verification,mint,pause}.ts
   bridges.ts                 route registry loader
-  commands/
+  commands/                  thin CLI wrappers (each runs one check, or the whole family)
     audit.ts                 meta-command: run every applicable check → report card
     solvency.ts              flagship: lock-vs-mint backing check
     upgradeability.ts        EIP-1967 / legacy proxy admin risk

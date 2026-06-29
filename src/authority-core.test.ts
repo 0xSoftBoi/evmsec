@@ -33,12 +33,35 @@ test("classifyAuthority: 1-of-N Safe is effectively a single key → critical, f
   assert.ok(v.summary.includes("1-of-5"));
 });
 
-test("classifyAuthority: m-of-n Safe (m>=2) → info, no fail", () => {
+test("classifyAuthority: healthy majority Safe (3-of-5) → info, no fail", () => {
   const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 3, owners: 5 } });
   assert.equal(v.kind, "safe");
   assert.equal(v.risk, "info");
   assert.equal(v.fail, false);
   assert.ok(v.summary.includes("3-of-5"));
+});
+
+test("classifyAuthority: low-threshold Safe (2-of-5, Harmony-class) → elevated, no hard fail", () => {
+  const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 2, owners: 5 } });
+  assert.equal(v.kind, "safe");
+  assert.equal(v.risk, "elevated");
+  assert.equal(v.fail, false);
+  assert.ok(v.summary.toLowerCase().includes("low threshold"));
+});
+
+test("classifyAuthority: 2-of-3 Safe is below the floor → elevated", () => {
+  const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 2, owners: 3 } });
+  assert.equal(v.risk, "elevated");
+});
+
+test("classifyAuthority: minority-but-≥3 Safe (3-of-7) → elevated (not a majority)", () => {
+  const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 3, owners: 7 } });
+  assert.equal(v.risk, "elevated");
+});
+
+test("classifyAuthority: solid majority Safe (4-of-7) → info", () => {
+  const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 4, owners: 7 } });
+  assert.equal(v.risk, "info");
 });
 
 test("classifyAuthority: timelock with zero delay → elevated (no exit window)", () => {

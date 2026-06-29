@@ -92,10 +92,17 @@ offline; `commands/*.ts` does I/O and exits non-zero on a failing verdict).
 
 The checks only matter if they're trivial to run:
 
-- ✅ **`evmsec audit <address>`** — *shipped.* A meta-command that runs every
-  check applying to a generic contract (verification-status + compiler-bugs +
-  upgradeability + admin-power + mint-authority + pause-guardian) and prints one
-  consolidated report card; non-zero exit if any check fails. See `commands/audit.ts`.
+- ✅ **Check framework** — *shipped.* The contract-audit checks are unified behind
+  one `Check` contract over a shared context (`src/check.ts`, `src/checks/`):
+  bytecode is fetched once and reused, each check returns a structured
+  `CheckReport`, and a single runner renders human / JSON / SARIF. This removed
+  the per-command duplication and the `audit` `process.exitCode` hack.
+- ✅ **`evmsec audit <address>`** — *shipped.* Runs the whole contract-audit family
+  over the shared context and prints one severity-ranked report card; `--fail-on`
+  controls the exit threshold. See `commands/audit.ts`, `checks/registry.ts`.
+- ✅ **SARIF output** — *shipped.* Every contract-audit command takes `--sarif`
+  (SARIF 2.1.0), so findings surface as GitHub code-scanning alerts. README has a
+  workflow that uploads it.
 - ✅ **GitHub Action** — *shipped.* A composite `action.yml` runs any evmsec
   command via an `args` input and builds from its own checkout, so it works
   without an npm release (`uses: 0xSoftBoi/evmsec@main`). A failing check fails
@@ -103,7 +110,6 @@ The checks only matter if they're trivial to run:
 - **Publish to npm** (`npx evmsec ...`) — the build already compiles to `dist/`
   with a `bin`; this is an external publish step (needs npm auth / a release tag).
 - **Docker image** — for cron / non-Node environments.
-- **SARIF output** — so findings surface in the GitHub Security tab.
 - **Seed `bridges.json`** with several real, source-cited verified routes.
 
 ## Validation debt

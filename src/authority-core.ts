@@ -94,6 +94,22 @@ export function classifyAuthority(input: AuthorityInput): AuthorityVerdict {
         summary: `Gnosis Safe with threshold ${threshold}-of-${owners} — a 1-of-N multisig is effectively a single key.`,
       };
     }
+    // A threshold below 3, or one that isn't a majority of the owners, is a thin
+    // margin: a 2-key phishing/compromise (Harmony's bridge was 2-of-5) or a
+    // minority of signers can move everything. Flag it for review rather than pass.
+    const belowFloor = threshold < 3;
+    const notMajority = threshold * 2 <= owners;
+    if (belowFloor || notMajority) {
+      const why = belowFloor
+        ? `only ${threshold} key(s) need be compromised to gain full control`
+        : `${threshold} of ${owners} is not a majority of signers`;
+      return {
+        kind: "safe",
+        risk: "elevated",
+        fail: false,
+        summary: `Gnosis Safe ${threshold}-of-${owners} — low threshold (${why}). Confirm this matches the value at risk and that signers are independent.`,
+      };
+    }
     return {
       kind: "safe",
       risk: "info",

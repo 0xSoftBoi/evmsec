@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Check framework + SARIF/JSON for every contract check** (`src/check.ts`,
+  `src/checks/`): the six contract-audit checks are now each a `Check` over a
+  shared `CheckContext` (bytecode fetched **once** and reused across checks),
+  returning a structured `CheckReport`. A single runner parses args, runs one
+  check or the whole family, and renders **human / `--json` / `--sarif`** output —
+  so every check (not just `audit`) gains a machine-readable aggregate and
+  GitHub code-scanning (SARIF 2.1.0) support, and `--fail-on <severity>` controls
+  the exit threshold (`critical` default, or `warning`). The standalone commands
+  are now thin wrappers over the same engine; ~600 lines of per-command argument
+  parsing, `getCode`, proxy-resolution, and printing duplication were removed, and
+  `audit` no longer fakes aggregation by snooping `process.exitCode`.
 - **GitHub Action** (`action.yml`): a composite action that runs any evmsec
   command in CI via an `args` input (e.g. `audit 0xContract --chain ethereum`).
   It builds evmsec from its own checkout, so it works today without an npm
@@ -146,6 +157,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Sharper Safe-threshold heuristic**: `admin-power` no longer waves through any
+  m-of-n multisig with m ≥ 2. A threshold below 3, or one that isn't a majority of
+  the owners, now reads `⚠ WARNING` (low threshold) — so a 2-of-5 Safe, the exact
+  shape of the Harmony Horizon bridge drained for ~$100M, is flagged instead of
+  passing. 1-of-N is still `critical`; a solid majority (e.g. 3-of-5, 4-of-7) is
+  still `info`. Pure logic in `authority-core.ts`, unit-tested.
+- **Unified, sharper check output**: every contract-audit command now renders
+  through the shared framework — a consistent severity-marked report with
+  structured evidence (addresses get explorer links) and a report card for
+  `audit`. `compiler-bugs` now surfaces only the bugs that drive the verdict
+  (medium and above) and collapses the long tail of low/very-low bugs into a
+  count, instead of dumping the whole list. JSON output changed shape to the
+  unified `{ overall, counts, reports[] }` aggregate (pre-1.0, unreleased).
 - **`mint-authority` resolves a FiatToken `masterMinter`**: when a token exposes
   `masterMinter()` (USDC-class), the tool reads and classifies it (the
   masterMinter, not `owner()`, gates minting) and the verdict reflects it — an
