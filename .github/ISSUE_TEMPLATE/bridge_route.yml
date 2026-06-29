@@ -1,0 +1,56 @@
+name: Bridge route submission
+description: Propose a verified lock-and-mint route for the bridges.json registry
+labels: [registry]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The registry asserts the invariant
+        `balanceOf(lock.token @ lock.escrow) ≥ totalSupply(mint.token)`.
+        **A security tool fed the wrong escrow lies confidently** — so every
+        address must trace to a primary source. Routes that can't be verified
+        won't be merged. (A PR with the JSON entry is even more welcome.)
+  - type: input
+    id: id
+    attributes:
+      label: Route id
+      description: Stable kebab-case id, e.g. `polygon-pos-usdc`.
+    validations:
+      required: true
+  - type: input
+    id: bridge
+    attributes:
+      label: Bridge name / asset
+      description: e.g. "Polygon PoS — USDC".
+    validations:
+      required: true
+  - type: input
+    id: lock
+    attributes:
+      label: Lock side
+      description: "`chain` / escrow address / token address on the source chain."
+    validations:
+      required: true
+  - type: input
+    id: mint
+    attributes:
+      label: Mint side
+      description: "`chain` / wrapped token address on the destination chain."
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Primary source
+      description: |
+        Link to the bridge's own deployment docs or the explorer-verified
+        contracts that establish each address. Not a third-party token list.
+    validations:
+      required: true
+  - type: checkboxes
+    id: sanity
+    attributes:
+      label: Sanity check
+      options:
+        - label: "`npm run evmsec -- solvency <id>` returns a plausible backing ratio (at or just above 100% for a healthy bridge)."
+          required: true

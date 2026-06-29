@@ -1,66 +1,94 @@
 import { Contract, formatUnits } from "ethers";
 import { ChainConfig, chain, chainById } from "../config.js";
-import {
-  ERC20_ABI,
-  bytes32ToAddress,
-  erc20Interface,
-  erc7683Interface,
-  getBlockCached,
-  getProvider,
-  shortAddr,
-  txLink,
-} from "../lib.js";
-import { ExpectedOutput, ObservedTransfer, classify, isNativeToken, matchDelivery } from "../settlement-core.js";
+import { ERC20_ABI, getBlockCached, getProvider, shortAddr, txLink, withRetry } from "../lib.js";
+import { ExpectedOutput, classify, matchDelivery } from "../settlement-core.js";
+import { DEFAULT_PROTOCOL, NormalizedOrder, getProtocol } from "../protocols/index.js";
+import { FillCandidate, chunkRange, selectFillTx } from "../discovery-core.js";
+import { Delivery, diagnose } from "../diagnose-core.js";
+
+/** getLogs sub-range size for fill scanning (override via EVMSEC_SCAN_CHUNK). */
+const SCAN_CHUNK = Number(process.env.EVMSEC_SCAN_CHUNK) || 10_000;
 
 /**
  * `evmsec settlement --source-chain <c> --intent-tx <openTx> --fill-tx <fillTx>`
  *
- * Verifies an ERC-7683 cross-chain intent was actually fulfilled: decodes the
- * `Open` event on the source chain to learn what the filler promised to deliver
- * (`maxSpent`), then checks the destination `fill` tx really delivered that
- * token/amount to the intended recipient, before the fillDeadline, and final.
+ * Verifies a cross-chain intent was actually fulfilled: decodes the intent on
+ * the source chain (which protocol via `--protocol`, default ERC-7683) to learn
+ * what the filler promised to deliver, then checks the destination `fill` tx
+ * really delivered that token/amount to the intended recipient, before the
+ * deadline, and final.
  */
 export async function settlement(args: string[]): Promise<void> {
   const o = parse(args);
-  if (!o.sourceChain || !o.intentTx || !o.fillTx) {
+  if (!o.sourceChain || !o.intentTx) {
     throw new Error(
-      "usage: evmsec settlement --source-chain <c> --intent-tx <openTx> --fill-tx <fillTx> " +
-        "[--dest-chain <c>] [--finality-depth 12] [--json]\n" +
-        "(v1 verifies ERC-7683 orders; auto-discovery of the fill tx is on the roadmap)",
+      "usage: evmsec settlement [diagnose] --source-chain <c> --intent-tx <openTx> [--fill-tx <fillTx>] " +
+        "[--protocol erc7683|across|cow] [--dest-chain <c>] [--scan-blocks 50000] [--finality-depth 12] [--json]\n" +
+        "(omit --fill-tx to auto-discover it; `settlement diagnose ...` classifies why an intent didn't settle)",
     );
   }
 
+  const proto = getProtocol(o.protocol ?? DEFAULT_PROTOCOL);
   const src = chain(o.sourceChain);
-  const order = await decodeOpen(src, o.intentTx);
 
-  const outputs: ExpectedOutput[] = order.maxSpent.map((x) => {
-    const token = bytes32ToAddress(x.token);
-    return { token, amount: x.amount, recipient: bytes32ToAddress(x.recipient), chainId: Number(x.chainId), native: isNativeToken(token) };
+  const intentReceipt = await withRetry(() => getProvider(src).getTransactionReceipt(o.intentTx!), {
+    label: "intent receipt",
   });
-  if (outputs.length === 0) throw new Error("intent has no maxSpent outputs to verify");
+  if (!intentReceipt) throw new Error(`intent tx not found on ${src.name}: ${o.intentTx}`);
+  const order = proto.parseIntent(intentReceipt.logs, { srcChainId: src.chainId });
+  if (!order) {
+    throw new Error(`no ${proto.label} intent event in ${o.intentTx} on ${src.name} — is this the order-opening tx?`);
+  }
+
+  const outputs = order.outputs;
+  if (outputs.length === 0) throw new Error("intent has no outputs to verify");
 
   const destChain = resolveDestChain(o.destChain, outputs);
   const destProvider = getProvider(destChain);
+  const onDest = outputs.filter((x) => x.chainId === destChain.chainId);
 
-  const fillReceipt = await destProvider.getTransactionReceipt(o.fillTx);
-  if (!fillReceipt) throw new Error(`fill tx not found on ${destChain.name}: ${o.fillTx}`);
-  const transfers = decodeTransfers(fillReceipt.logs);
+  // Forensic mode: an intent that should have settled but didn't. Classify the
+  // failure mode from what (if anything) reached the recipient.
+  if (o.diagnose) {
+    await runDiagnose(destChain, onDest, order, o.scanBlocks, o.json);
+    return;
+  }
+
+  // Auto-discover the fill tx on the destination when the user didn't supply one.
+  let fillTx = o.fillTx;
+  if (!fillTx) {
+    if (!o.json)
+      console.error(`no --fill-tx — scanning the last ${o.scanBlocks} ${destChain.name} blocks for the fill…`);
+    fillTx = await discoverFillTx(destChain, onDest, o.scanBlocks);
+    if (!o.json) console.error(`discovered fill tx ${fillTx}`);
+  }
+
+  const fillReceipt = await withRetry(() => destProvider.getTransactionReceipt(fillTx!), { label: "fill receipt" });
+  if (!fillReceipt) throw new Error(`fill tx not found on ${destChain.name}: ${fillTx}`);
+  const transfers = proto.parseFill(fillReceipt.logs);
   const fillBlock = fillReceipt.blockNumber;
   const [fillTs, destHead] = await Promise.all([
     getBlockCached(destProvider, destChain.key, fillBlock).then((b) => b.timestamp),
-    destProvider.getBlockNumber(),
+    withRetry(() => destProvider.getBlockNumber(), { label: "dest head" }),
   ]);
   const finalized = destHead - fillBlock >= o.finalityDepth;
-  const fillDeadline = Number(order.fillDeadline);
-  const deadlineMet = fillTs <= fillDeadline;
+  const fillDeadline = order.fillDeadline;
+  const deadlineMet = fillDeadline === 0 || fillTs <= fillDeadline;
 
-  const onDest = outputs.filter((x) => x.chainId === destChain.chainId);
   const decimalsCache = new Map<string, number>();
 
-  const results = [];
+  const results: OutResult[] = [];
   for (const out of onDest) {
     if (out.native) {
-      results.push({ out, native: true, verdict: { status: "anomaly" as const, anomalies: [], warnings: ["native-token output — not verifiable from ERC-20 logs in v1; inspect the fill tx manually"] } });
+      results.push({
+        out,
+        native: true,
+        verdict: {
+          status: "anomaly",
+          anomalies: [],
+          warnings: ["native-token output — not verifiable from ERC-20 logs in v1; inspect the fill tx manually"],
+        },
+      });
       continue;
     }
     const check = matchDelivery(out, transfers);
@@ -70,28 +98,35 @@ export async function settlement(args: string[]): Promise<void> {
   }
 
   if (o.json) {
-    console.log(JSON.stringify({
-      orderId: order.orderId,
-      user: order.user,
-      sourceChain: src.name,
-      destChain: destChain.name,
-      fillTx: o.fillTx,
-      fillBlock,
-      fillDeadline,
-      deadlineMet,
-      finalized,
-      outputs: results.map((r) => ({
-        token: r.out.token,
-        recipient: r.out.recipient,
-        expected: r.out.amount.toString(),
-        delivered: r.native ? null : r.check?.deliveredValue.toString(),
-        status: r.verdict.status,
-        anomalies: r.verdict.anomalies,
-        warnings: r.verdict.warnings,
-      })),
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          protocol: proto.key,
+          orderId: order.orderId,
+          user: order.user,
+          sourceChain: src.name,
+          destChain: destChain.name,
+          fillTx,
+          fillBlock,
+          fillDeadline,
+          deadlineMet,
+          finalized,
+          outputs: results.map((r) => ({
+            token: r.out.token,
+            recipient: r.out.recipient,
+            expected: r.out.amount.toString(),
+            delivered: r.native ? null : r.check?.deliveredValue.toString(),
+            status: r.verdict.status,
+            anomalies: r.verdict.anomalies,
+            warnings: r.verdict.warnings,
+          })),
+        },
+        null,
+        2,
+      ),
+    );
   } else {
-    render(src, destChain, order, o.fillTx, fillBlock, fillTs, fillDeadline, results);
+    render(proto.label, src, destChain, order, fillTx, fillBlock, fillTs, fillDeadline, results);
   }
 
   const bad = results.some((r) => r.verdict.status !== "settled");
@@ -99,44 +134,132 @@ export async function settlement(args: string[]): Promise<void> {
 
   const otherChains = [...new Set(outputs.filter((x) => x.chainId !== destChain.chainId).map((x) => x.chainId))];
   if (otherChains.length && !o.json) {
-    console.log(`note: intent also has outputs on chainId(s) ${otherChains.join(", ")} — re-run with their --fill-tx / --dest-chain to verify those.\n`);
+    console.log(
+      `note: intent also has outputs on chainId(s) ${otherChains.join(", ")} — re-run with their --fill-tx / --dest-chain to verify those.\n`,
+    );
   }
 }
 
-// ── decoding ────────────────────────────────────────────────────────────────
+// ── helpers ─────────────────────────────────────────────────────────────────
 
-interface RawOutput { token: string; amount: bigint; recipient: string; chainId: bigint; }
-interface OpenOrder { orderId: string; user: string; fillDeadline: bigint; maxSpent: RawOutput[]; }
-
-async function decodeOpen(src: ChainConfig, intentTx: string): Promise<OpenOrder> {
-  const receipt = await getProvider(src).getTransactionReceipt(intentTx);
-  if (!receipt) throw new Error(`intent tx not found on ${src.name}: ${intentTx}`);
-
-  const openTopic = erc7683Interface.getEvent("Open")!.topicHash;
-  for (const log of receipt.logs) {
-    if (log.topics[0] !== openTopic) continue;
-    const parsed = erc7683Interface.parseLog({ topics: [...log.topics], data: log.data });
-    if (!parsed) continue;
-    const ro = parsed.args.resolvedOrder;
-    const maxSpent: RawOutput[] = ro.maxSpent.map((x: { token: string; amount: bigint; recipient: string; chainId: bigint }) => ({
-      token: x.token, amount: x.amount, recipient: x.recipient, chainId: x.chainId,
-    }));
-    return { orderId: parsed.args.orderId as string, user: ro.user as string, fillDeadline: ro.fillDeadline as bigint, maxSpent };
+/**
+ * Best-effort: scan the destination chain for the tx that fills an output —
+ * ERC-20 Transfers of the expected token to the recipient, over a bounded
+ * window, chunked to survive node `getLogs` range caps. Picks the earliest tx
+ * that reaches the expected amount (selection logic in discovery-core).
+ */
+async function discoverFillTx(destChain: ChainConfig, onDest: ExpectedOutput[], scanBlocks: number): Promise<string> {
+  const target = onDest.find((o) => !o.native);
+  if (!target) {
+    throw new Error("can't auto-discover a native-token delivery from logs — pass --fill-tx explicitly");
   }
-  throw new Error(`no ERC-7683 Open event in ${intentTx} on ${src.name} — is this the order-opening tx?`);
-}
+  const provider = getProvider(destChain);
+  const head = await withRetry(() => provider.getBlockNumber(), { label: "dest head" });
+  const from = Math.max(0, head - Math.max(1, scanBlocks));
+  const token = new Contract(target.token, ERC20_ABI, provider);
+  const filter = token.filters.Transfer(null, target.recipient);
 
-function decodeTransfers(logs: readonly { address: string; topics: readonly string[]; data: string }[]): ObservedTransfer[] {
-  const out: ObservedTransfer[] = [];
-  for (const log of logs) {
+  const candidates: FillCandidate[] = [];
+  let scanned = 0;
+  for (const [lo, hi] of chunkRange(from, head, SCAN_CHUNK)) {
     try {
-      const p = erc20Interface.parseLog({ topics: [...log.topics], data: log.data });
-      if (p?.name === "Transfer") out.push({ token: log.address, to: p.args.to as string, value: p.args.value as bigint });
+      const logs = await withRetry(() => token.queryFilter(filter, lo, hi), { label: "fill scan" });
+      for (const l of logs) {
+        const ev = l as unknown as { args: { value: bigint }; transactionHash: string; blockNumber: number };
+        candidates.push({
+          tx: ev.transactionHash,
+          block: ev.blockNumber,
+          token: target.token,
+          to: target.recipient,
+          value: ev.args.value,
+        });
+      }
+      scanned++;
     } catch {
-      // not an ERC-20 Transfer — skip
+      // node rejected this range (cap/timeout) — skip the chunk, keep scanning
     }
   }
-  return out;
+
+  const match = selectFillTx(target, candidates);
+  if (!match) {
+    throw new Error(
+      `auto-discovery found no fill delivering ${target.amount} of ${target.token} to ${target.recipient} on ` +
+        `${destChain.name} in the last ${scanBlocks} blocks (${scanned} range(s) scanned) — pass --fill-tx, widen ` +
+        `--scan-blocks, or point at an archive/indexer RPC.`,
+    );
+  }
+  return match.tx;
+}
+
+/**
+ * `--diagnose`: scan the destination for the expected token's deliveries to the
+ * recipient and classify why the intent did (or didn't) settle. Exits non-zero
+ * on any non-`settled` verdict.
+ */
+async function runDiagnose(
+  destChain: ChainConfig,
+  onDest: ExpectedOutput[],
+  order: NormalizedOrder,
+  scanBlocks: number,
+  json: boolean,
+): Promise<void> {
+  const target = onDest.find((o) => !o.native);
+  if (!target) {
+    throw new Error("can't diagnose a native-token delivery from logs — inspect the fill tx manually");
+  }
+  const provider = getProvider(destChain);
+  const head = await withRetry(() => provider.getBlockNumber(), { label: "dest head" });
+  const from = Math.max(0, head - Math.max(1, scanBlocks));
+  const token = new Contract(target.token, ERC20_ABI, provider);
+  const filter = token.filters.Transfer(null, target.recipient);
+
+  const deliveries: Delivery[] = [];
+  for (const [lo, hi] of chunkRange(from, head, SCAN_CHUNK)) {
+    try {
+      const logs = await withRetry(() => token.queryFilter(filter, lo, hi), { label: "diagnose scan" });
+      for (const l of logs) {
+        const ev = l as unknown as { args: { value: bigint }; transactionHash: string; blockNumber: number };
+        const ts = (await getBlockCached(provider, destChain.key, ev.blockNumber)).timestamp;
+        deliveries.push({ value: ev.args.value, ts, tx: ev.transactionHash });
+      }
+    } catch {
+      // node rejected this range — skip, continue best-effort
+    }
+  }
+
+  const d = diagnose({ amount: target.amount, deadline: order.fillDeadline, toRecipient: deliveries });
+  const mark = d.mode === "settled" ? "✓" : "✗";
+
+  if (json) {
+    console.log(
+      JSON.stringify(
+        {
+          mode: d.mode,
+          orderId: order.orderId,
+          destChain: destChain.name,
+          token: target.token,
+          recipient: target.recipient,
+          expected: target.amount.toString(),
+          delivered: d.deliveredValue.toString(),
+          tx: d.tx ?? null,
+          evidence: d.evidence,
+        },
+        null,
+        2,
+      ),
+    );
+  } else {
+    console.log(`\nSettlement diagnosis — order ${shortAddr(order.orderId)} on ${destChain.name}`);
+    console.log("─".repeat(70));
+    console.log(`  outcome     ${mark} ${d.mode.toUpperCase()}`);
+    console.log(`  recipient   ${target.recipient}`);
+    console.log(`  expected    ${target.amount}   delivered ${d.deliveredValue}`);
+    if (d.tx) console.log(`  fill tx     ${d.tx}\n              ${txLink(destChain, d.tx)}`);
+    for (const e of d.evidence) console.log(`  · ${e}`);
+    console.log();
+  }
+
+  if (d.mode !== "settled") process.exitCode = 1;
 }
 
 function resolveDestChain(destChainKey: string | undefined, outputs: ExpectedOutput[]): ChainConfig {
@@ -144,10 +267,13 @@ function resolveDestChain(destChainKey: string | undefined, outputs: ExpectedOut
   const ids = [...new Set(outputs.map((x) => x.chainId))];
   if (ids.length === 1) {
     const c = chainById(ids[0]);
-    if (!c) throw new Error(`destination chainId ${ids[0]} is not configured — add it to src/config.ts or pass --dest-chain`);
+    if (!c)
+      throw new Error(`destination chainId ${ids[0]} is not configured — add it to src/config.ts or pass --dest-chain`);
     return c;
   }
-  throw new Error(`intent spans destination chainIds ${ids.join(", ")} — pass --dest-chain to pick which the fill tx is on`);
+  throw new Error(
+    `intent spans destination chainIds ${ids.join(", ")} — pass --dest-chain to pick which the fill tx is on`,
+  );
 }
 
 async function tokenDecimals(c: ChainConfig, token: string, cache: Map<string, number>): Promise<number> {
@@ -155,7 +281,9 @@ async function tokenDecimals(c: ChainConfig, token: string, cache: Map<string, n
   let d = cache.get(key);
   if (d === undefined) {
     try {
-      d = Number(await new Contract(token, ERC20_ABI, getProvider(c)).decimals());
+      d = Number(
+        await withRetry(() => new Contract(token, ERC20_ABI, getProvider(c)).decimals(), { label: "decimals" }),
+      );
     } catch {
       d = 18;
     }
@@ -175,27 +303,34 @@ interface OutResult {
 }
 
 function render(
+  protoLabel: string,
   src: ChainConfig,
   dest: ChainConfig,
-  order: OpenOrder,
+  order: NormalizedOrder,
   fillTx: string,
   fillBlock: number,
   fillTs: number,
   fillDeadline: number,
   results: OutResult[],
 ): void {
-  console.log(`\nERC-7683 settlement — order ${shortAddr(order.orderId)}`);
+  console.log(`\n${protoLabel} settlement — order ${shortAddr(order.orderId)}`);
   console.log("─".repeat(70));
   console.log(`  user        ${order.user}`);
   console.log(`  route       ${src.name} → ${dest.name}`);
   console.log(`  fill tx     ${fillTx}  (block ${fillBlock})`);
-  console.log(`  deadline    fill ${new Date(fillTs * 1000).toISOString()}  vs  ${new Date(fillDeadline * 1000).toISOString()}  ${fillTs <= fillDeadline ? "✓" : "✗ LATE"}`);
+  const deadlineStr =
+    fillDeadline === 0
+      ? "no deadline declared"
+      : `fill ${new Date(fillTs * 1000).toISOString()}  vs  ${new Date(fillDeadline * 1000).toISOString()}  ${fillTs <= fillDeadline ? "✓" : "✗ LATE"}`;
+  console.log(`  deadline    ${deadlineStr}`);
 
   for (const r of results) {
     const mark = r.verdict.status === "settled" ? "✓" : r.verdict.status === "anomaly" ? "⚠" : "✗";
     const tokenLabel = r.native ? "native" : shortAddr(r.out.token);
-    const fmt = (v: bigint) => (r.dec !== undefined ? formatUnits(v, r.dec) : v.toString());
-    console.log(`\n  ${mark} output → ${shortAddr(r.out.recipient)}  (${tokenLabel})  [${r.verdict.status.toUpperCase()}]`);
+    const fmt = (v: bigint): string => (r.dec !== undefined ? formatUnits(v, r.dec) : v.toString());
+    console.log(
+      `\n  ${mark} output → ${shortAddr(r.out.recipient)}  (${tokenLabel})  [${r.verdict.status.toUpperCase()}]`,
+    );
     console.log(`     expected ${fmt(r.out.amount)}`);
     if (r.check) console.log(`     delivered ${fmt(r.check.deliveredValue)}`);
     for (const a of r.verdict.anomalies) console.log(`     ⚠ ${a}`);
@@ -207,24 +342,49 @@ function render(
 // ── args ────────────────────────────────────────────────────────────────────
 
 interface Opts {
+  protocol?: string;
   sourceChain?: string;
   destChain?: string;
   intentTx?: string;
   fillTx?: string;
+  scanBlocks: number;
   finalityDepth: number;
+  diagnose: boolean;
   json: boolean;
 }
 
 function parse(args: string[]): Opts {
-  const o: Opts = { finalityDepth: 12, json: false };
+  const o: Opts = { finalityDepth: 12, scanBlocks: 50_000, diagnose: false, json: false };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case "--source-chain": o.sourceChain = args[++i]; break;
-      case "--dest-chain": o.destChain = args[++i]; break;
-      case "--intent-tx": o.intentTx = args[++i]; break;
-      case "--fill-tx": o.fillTx = args[++i]; break;
-      case "--finality-depth": o.finalityDepth = Number(args[++i]); break;
-      case "--json": o.json = true; break;
+      case "diagnose":
+      case "--diagnose":
+        o.diagnose = true;
+        break;
+      case "--protocol":
+        o.protocol = args[++i];
+        break;
+      case "--source-chain":
+        o.sourceChain = args[++i];
+        break;
+      case "--dest-chain":
+        o.destChain = args[++i];
+        break;
+      case "--intent-tx":
+        o.intentTx = args[++i];
+        break;
+      case "--fill-tx":
+        o.fillTx = args[++i];
+        break;
+      case "--scan-blocks":
+        o.scanBlocks = Number(args[++i]);
+        break;
+      case "--finality-depth":
+        o.finalityDepth = Number(args[++i]);
+        break;
+      case "--json":
+        o.json = true;
+        break;
     }
   }
   return o;

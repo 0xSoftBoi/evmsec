@@ -63,11 +63,40 @@ non-zero when undercollateralized**, so it drops straight into CI or a cron:
 ```
 
 Define your own verified routes in `bridges.json` (or point `EVMSEC_BRIDGES` at
-your file). ⚠️ The bundled entries are *illustrative* — verify every address
+your file). ⚠️ The bundled entries are _illustrative_ — verify every address
 against the bridge's own source before trusting a number. A security tool fed
 the wrong escrow lies confidently.
 
-#### `solvency --since` — *when* did backing break? (forensic)
+**Multi-asset / multi-escrow routes.** A route's `lock` may be an **array of
+legs** (each `{ chain, escrow, token }`). The legs are summed — normalized to 18
+decimals — against the minted supply, so a bridge that spreads collateral across
+several escrows or chains is checked as one invariant. The legs must denominate
+the same unit as the minted token; summing differently-priced assets needs a
+price oracle and is deliberately out of scope.
+
+```jsonc
+"lock": [
+  { "chain": "ethereum", "escrow": "0xEsc1", "token": "0xUSDC" },
+  { "chain": "ethereum", "escrow": "0xEsc2", "token": "0xUSDC" }
+]
+```
+
+#### `solvency --watch` — alert the moment backing breaks
+
+Poll the routes on an interval and alert **once per breach transition** (a route
+going under, or recovering) — steady state is silent, so it won't spam. Add
+`--delta <pp>` to also alert on a **sudden drop** in backing (by that many
+points) even while a route is still above the threshold. Optional `--webhook`
+POSTs a JSON alert; clean shutdown on Ctrl-C.
+
+```bash
+npm run evmsec -- solvency --all --watch --interval 60 --delta 5 --webhook https://hooks.example/bridge
+```
+
+A self-hosted alternative to managed monitoring: no infra, just a process (or a
+container) watching the invariant and paging you on the transition.
+
+#### `solvency --since` — _when_ did backing break? (forensic)
 
 After a hack, the question is "when did the bridge first go insolvent?"
 `--since` binary-searches block history to pin the exact destination-chain block
@@ -97,32 +126,139 @@ npm run evmsec -- upgradeability 0xToken --chain base
 
 Reads EIP-1967 slots: is it an upgradeable proxy, what's the implementation, and
 is the upgrade admin a single EOA (one key from a rug) or a contract
-(multisig/timelock)?
+(multisig/timelock)? Add `--json` to drop it into CI.
+
+### `mint-authority` — can the wrapped supply be inflated, and by whom?
+
+`solvency` says a bridge is backed _now_. But a token can read 100% backed today
+and still carry an open mint function — a future money printer one key away from
+use. This asks the next question every auditor asks: **who, if anyone, can
+inflate the supply?**
+
+```bash
+npm run evmsec -- mint-authority 0xWrappedToken --chain polygon [--json]
+```
+
+It follows the proxy to its implementation (most bridge tokens are proxies),
+scans the bytecode for mint/burn/pause entrypoints, a supply **cap**, and the
+auth model (Ownable vs OpenZeppelin AccessControl). For Ownable tokens it reads
+`owner()`; for AccessControl tokens it **enumerates the actual `MINTER_ROLE`
+holders** (via AccessControlEnumerable, or `RoleGranted` history as a fallback)
+and classifies each as a single **EOA** (one-key inflation risk) or a
+**contract** (multisig/timelock — inspect it). It also reads the **cap value**
+when present, so bounded inflation reads differently from uncapped. For
+**FiatToken** (USDC-class) tokens it resolves the `masterMinter()` that actually
+gates minting and classifies it. **Exit code is non-zero when an inflatable
+supply sits under a single EOA**, so it drops into CI alongside `solvency`:
+
+```bash
+evmsec mint-authority 0xWrappedToken || alert "wrapped token mint is single-key controlled"
+```
+
+Honestly scoped like the others: a bytecode + on-chain-read heuristic, not a
+proof. Role enumeration is best-effort (a public RPC that caps `getLogs` ranges
+may return an incomplete set — the tool says so). It resolves a `masterMinter`
+indirection where present, but always tells you to confirm the gating against
+source. The detection logic (`mint-authority-core.ts`) is unit-tested offline.
+
+### `pause-guardian` — can transfers be frozen, and who holds the key?
+
+Many bridge tokens are Pausable. A single key that can pause a wrapped asset can
+halt every holder at once — a liveness / censorship vector. This asks: **is the
+token pausable, is it paused right now, and who holds the pause authority?**
+
+```bash
+npm run evmsec -- pause-guardian 0xWrappedToken --chain polygon [--json]
+```
+
+Same shape as `mint-authority`: follows the proxy, detects the Pausable surface
+and auth model, reads `paused()` to report the **current** state, and resolves
+the guardian — Ownable `owner()` or the enumerated `PAUSER_ROLE` holders,
+classified EOA vs contract. **Exit code is non-zero when a single EOA can freeze
+transfers.** A currently-paused token is flagged prominently regardless of who
+holds the key. Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is
+unit-tested.
 
 ### `settlement` — did the cross-chain intent actually get filled?
 
-For [ERC-7683](https://eips.ethereum.org/EIPS/eip-7683) intents: decode the
-`Open` event on the source chain to learn what the filler *promised* to deliver
-(`maxSpent`), then check the destination `fill` tx really delivered that token
-and amount to the intended recipient, before the `fillDeadline`, and final.
+Decode an intent on the source chain to learn what the filler _promised_ to
+deliver, then check the `fill` tx really delivered that token and amount to the
+intended recipient, before the deadline, and final. The decoder is pluggable via
+`--protocol` (default ERC-7683):
+
+| `--protocol` | intent event                          | notes                                                                                       |
+| ------------ | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `erc7683`    | `Open` (`maxSpent`)                   | the [ERC-7683](https://eips.ethereum.org/EIPS/eip-7683) standard; cross-chain               |
+| `across`     | `FundsDeposited` / `V3FundsDeposited` | Across SpokePool; cross-chain                                                               |
+| `cow`        | `Trade` (batch)                       | CoW Protocol; **same-chain** — pass the settlement tx as both `--intent-tx` and `--fill-tx` |
 
 ```bash
-npm run evmsec -- settlement \
-  --source-chain ethereum --intent-tx 0xOpenTxHash \
-  --fill-tx 0xFillTxHash [--dest-chain base] [--finality-depth 12] [--json]
+# ERC-7683 / Across (cross-chain)
+npm run evmsec -- settlement --protocol across \
+  --source-chain ethereum --intent-tx 0xDepositTx \
+  --fill-tx 0xFillTx [--dest-chain base] [--finality-depth 12] [--json]
+
+# CoW (same-chain: one settlement tx is both sides)
+npm run evmsec -- settlement --protocol cow \
+  --source-chain ethereum --intent-tx 0xSettleTx --fill-tx 0xSettleTx
 ```
 
 Per output it reports `settled` / `unsettled` / `anomaly` and exits non-zero on
 anything but a clean settlement — catching missing fills, wrong-recipient fills,
 late fills, and underfills.
 
-This is a **packaging** tool, honestly scoped — settlement logic lives inside
-every solver, but not as a standalone auditor you can point at an arbitrary
-intent. **v1 limits:** ERC-7683 only (Across/CoW/UniswapX have their own
-formats); it verifies ERC-20 deliveries via Transfer logs (native-token outputs
-are flagged, not proven); it does **not** cryptographically verify cross-chain
-message proofs; and you supply the `--fill-tx` (auto-discovery needs an indexer
-— roadmap). Treat it as a settlement *audit helper*, not an oracle of truth.
+**`settlement diagnose`** is the forensic counterpart for an intent that _should_
+have settled but didn't. Without needing a fill tx, it scans the destination for
+the expected token's deliveries to the recipient and classifies the failure
+mode — `never-filled`, `underfilled`, `filled-late`, or `settled` — with the
+on-chain evidence (the completing tx, how late, how short):
+
+```bash
+npm run evmsec -- settlement diagnose --protocol across \
+  --source-chain ethereum --intent-tx 0xDepositTx [--scan-blocks 50000] [--json]
+```
+
+Honestly scoped. Each decoder reads the protocol's own deposit/trade event (ABIs
+from the official contracts) and verifies ERC-20 deliveries via Transfer logs;
+native-token outputs are flagged, not proven. **Omit `--fill-tx` to
+auto-discover it**: the tool scans the last `--scan-blocks` (default 50k) of the
+destination for the matching delivery (chunked to survive node `getLogs` caps)
+and picks the earliest tx that satisfies the output — falling back to a clear
+message when it can't, so you can pass `--fill-tx` or widen the window. Limits:
+**UniswapX** isn't supported — its `Fill` event carries no output amounts, so the
+promise can't be read from logs alone (it needs the signed order / calldata —
+roadmap). CoW verifies delivery to the order `owner` (the `Trade` event omits an
+optional `receiver`). It does **not** cryptographically verify cross-chain
+message proofs. Decoders are unit-tested offline; **validate a new protocol
+against a real settlement before trusting a number.** Treat it as a settlement
+_audit helper_, not an oracle.
+
+### `message-proof` — was the cross-chain message validly attested?
+
+`settlement` confirms a token _delivery_. The stronger guarantee is that a
+_validly attested message_ actually crossed the messaging layer. This checks the
+attestation directly on the destination chain (a single `eth_call`, no logs):
+
+| `--layer`   | check                                                        | you supply                  |
+| ----------- | ------------------------------------------------------------ | --------------------------- |
+| `hyperlane` | `Mailbox.delivered(messageId)` — passed its ISM and executed | `--id <bytes32 message id>` |
+| `wormhole`  | `Core.parseAndVerifyVM(vaa)` — guardian signatures valid     | `--vaa <0x encoded VAA>`    |
+
+```bash
+npm run evmsec -- message-proof --layer hyperlane --chain base --id 0xMessageId
+npm run evmsec -- message-proof --layer wormhole  --chain ethereum --vaa 0x01000000... --json
+```
+
+**Exit code is non-zero unless the message is confirmed verified**, so an
+unattested or unrelayed message fails a CI gate. Core Wormhole / Hyperlane
+contract addresses are bundled for ethereum, base, arbitrum, optimism, and
+polygon (each verified live before bundling); override with `--contract` for
+other chains. It distinguishes "tokens arrived" from "tokens arrived **and** the
+message was validly attested" — a tampered VAA reads `UNVERIFIED` (the guardian
+signatures fail on-chain), not a false pass. **LayerZero** isn't supported yet:
+verifying a specific message's DVN attestation needs the full Origin/nonce
+context and the receiver's configured DVN set, not a single view call (roadmap).
+The VAA parser and verdict classifiers (`message-proof-core.ts`) are unit-tested.
 
 ### `pq-readiness` — is this verifier quantum-safe, or printing forgeries later?
 
@@ -164,38 +300,77 @@ triage → resolve proxies → confirm from source → score → remediate — a
 `ethereum · base · arbitrum · optimism · polygon · sepolia · base-sepolia`
 — override any RPC via env (`ETHEREUM_RPC_URL`, `BASE_RPC_URL`, …).
 
+## Reliability
+
+Public RPCs are flaky, and a security check that aborts on a transient blip is
+worse than useless in a cron. Every on-chain read goes through a per-request
+timeout (`EVMSEC_RPC_TIMEOUT_MS`, default 20s) and bounded exponential-backoff
+retry on transient errors only — timeouts, 429s, 5xx, resets — while real errors
+(reverts, bad input) surface immediately (`EVMSEC_RPC_RETRIES`, default 3).
+`solvency --all` checks routes with bounded concurrency (`EVMSEC_CONCURRENCY`,
+default 5) and isolates per-route failures: one unreadable route is reported as
+`ERROR` and fails the exit code, without masking the others.
+
 ## Layout
 
 ```
 src/
-  config.ts                chains, RPCs
-  lib.ts                   provider cache, ABIs (ERC-20 / ERC-7683), proxy slots, math, bisection
-  lib.test.ts              unit tests for the pure logic (no network)
-  settlement-core.ts       pure ERC-7683 delivery-matching + verdict logic
-  pq-core.ts               pure post-quantum scheme classification (bytecode → verdict)
-  pq-core.test.ts          unit tests for the PQ classifier (no network)
-  settlement-core.test.ts  unit tests for settlement logic (no network)
-  bridges.ts               route registry loader
+  config.ts                  chains, RPCs
+  lib.ts                     provider cache + RPC retry/concurrency, ABIs, proxy slots, math, bisection
+  lib.test.ts                unit tests for the pure logic (no network)
+  solvency-core.ts           pure backing summation, breach predicate, watch transitions
+  registry-core.ts           pure bridges.json validator (shape, chains, checksums, sources)
+  discovery-core.ts          pure fill-tx selection + getLogs range chunking
+  diagnose-core.ts           pure settlement failure-mode classification
+  message-proof-core.ts      pure VAA-header parsing + attestation classifiers
+  message-layers/            per-layer attestation verifiers (Hyperlane, Wormhole)
+  settlement-core.ts         pure delivery-matching + verdict logic (protocol-agnostic)
+  protocols/                 pluggable settlement decoders (Protocol interface; erc7683, across, cow)
+  pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
+  mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
+  pause-guardian-core.ts     pure pause capability + guardian classification
+  *-core.test.ts             unit tests for the pure cores (no network)
+  bridges.ts                 route registry loader
   commands/
-    solvency.ts            flagship: lock-vs-mint backing check
-    upgradeability.ts      EIP-1967 / legacy proxy admin risk
-    settlement.ts          ERC-7683 cross-chain intent fill verification
-    pq-readiness.ts        post-quantum readiness of a verifier (Shor-breakable?)
-  index.ts                 CLI dispatcher
-bridges.json               route registry (verify before trusting)
+    solvency.ts              flagship: lock-vs-mint backing check
+    upgradeability.ts        EIP-1967 / legacy proxy admin risk
+    mint-authority.ts        who can inflate the wrapped supply?
+    pause-guardian.ts        who can freeze transfers?
+    settlement.ts            cross-chain intent fill verification (erc7683/across/cow)
+    message-proof.ts         cross-chain message attestation (Wormhole/Hyperlane)
+    pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)
+  index.ts                   CLI dispatcher
+bridges.json                 route registry (verify before trusting)
 ```
 
 ## Development
 
 ```bash
 npm install
-npm run typecheck     # strict tsc
-npm test              # node:test via tsx — pure logic, no network
+npm run check         # format + lint + typecheck + tests, in one gate
 ```
 
-The backing math, the forensic bisection, and the proxy-slot parsing are
-unit-tested and run offline; CI (`.github/workflows/ci.yml`) runs typecheck +
-tests on Node 20 and 22 for every push and PR.
+Individual steps:
+
+```bash
+npm run format        # Prettier (write)   ·  npm run format:check in CI
+npm run lint          # ESLint              ·  npm run lint:fix to autofix
+npm run typecheck     # strict tsc, no emit
+npm test              # node:test via tsx — pure logic, no network
+npm run test:coverage # the same, with V8 coverage
+npm run validate:registry  # check bridges.json (shape, chains, checksums, sources)
+npm run build         # compile to dist/ (what `prepublishOnly` ships)
+```
+
+The backing math, the multi-asset summation, the forensic bisection, the
+`--watch` transition/degrade logic, the registry validator, the proxy-slot
+parsing, the PQ / mint-authority / pause-guardian classifiers, the settlement
+decoders + fill-discovery + diagnosis, the VAA parser / attestation classifiers,
+and the RPC retry/concurrency helpers are unit-tested and run offline. Test
+discovery is explicit (`scripts/run-tests.mjs`) so it behaves identically across
+shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
+typecheck, and build once, plus the test suite on Node 20 and 22, for every push
+and PR.
 
 ## Supply chain / Security
 
@@ -227,9 +402,6 @@ security audit or a SOC 2 attestation.
 See [ROADMAP.md](./ROADMAP.md) for the full, scoped plan (each item is grounded
 in prior art with an approach + acceptance criteria, and has a tracking issue):
 
-- `mint-authority <token>` — who can mint; is ownership renounced?
-- `solvency --watch` — alert the moment backing breaks
-- multi-asset bridges (sum escrows across many tokens)
 - a CI-validated, community-verified `bridges.json` registry
 - `settlement`: more intent formats (Across, CoW, UniswapX), fill-tx
   auto-discovery, cross-chain message-proof verification, `settlement diagnose`

@@ -1,6 +1,7 @@
 import { getAddress } from "ethers";
+import { erc20Interface } from "./lib.js";
 
-/** An output the filler must deliver on the destination chain (from `maxSpent`). */
+/** An output the filler must deliver on the destination chain. */
 export interface ExpectedOutput {
   token: string;
   amount: bigint;
@@ -14,6 +15,32 @@ export interface ObservedTransfer {
   token: string;
   to: string;
   value: bigint;
+}
+
+/** The minimal log shape protocol decoders need (an ethers `Log` satisfies it). */
+export interface LogLike {
+  address: string;
+  topics: readonly string[];
+  data: string;
+}
+
+/**
+ * Decode the ERC-20 `Transfer` events from a fill transaction's logs. The
+ * default `parseFill` for protocols whose delivery is an ERC-20 transfer to the
+ * recipient. Pure — non-Transfer logs are skipped.
+ */
+export function decodeErc20Transfers(logs: readonly LogLike[]): ObservedTransfer[] {
+  const out: ObservedTransfer[] = [];
+  for (const log of logs) {
+    try {
+      const p = erc20Interface.parseLog({ topics: [...log.topics], data: log.data });
+      if (p?.name === "Transfer")
+        out.push({ token: log.address, to: p.args.to as string, value: p.args.value as bigint });
+    } catch {
+      // not an ERC-20 Transfer — skip
+    }
+  }
+  return out;
 }
 
 export interface DeliveryCheck {

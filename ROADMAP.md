@@ -1,70 +1,65 @@
 # evmsec roadmap
 
-Each item below is grounded in what already exists (so we build the *unpackaged*
+Each item below is grounded in what already exists (so we build the _unpackaged_
 slice, not a duplicate) and scoped with an approach + acceptance criteria.
 Effort: **S** ≈ a day, **M** ≈ a few days, **L** ≈ a week+.
 
 ---
 
-## 1. `mint-authority <token>` — who can mint this token?  **[S]**
+## 1. `mint-authority <token>` — who can mint this token? ✅ **shipped**
 
-**Why.** An ERC-20 whose mint is controlled by a single EOA is one key away from
-infinite issuance — the same trust question `upgradeability` asks for proxies.
-No dedicated open-source EVM CLI surfaces this (the concept is well understood —
-`Ownable` / AccessControl `MINTER_ROLE` / a supply `cap` — but unpackaged).
+An ERC-20 whose mint is controlled by a single EOA is one key away from infinite
+issuance — the same trust question `upgradeability` asks for proxies.
 
-**Approach.**
-- Read `owner()` (Ownable) and detect ownership renounced (`owner == 0`).
-- Probe AccessControl: `getRoleMemberCount(MINTER_ROLE)` / `hasRole`, common role hashes.
-- Detect a supply cap (`cap()` / `maxSupply()`); flag uncapped + mintable.
-- Classify the controller as EOA / contract (reuse `upgradeability`'s EOA check).
+Shipped in `mint-authority` / `mint-authority-core.ts`: follows the proxy to its
+implementation, scans bytecode for mint/burn/pause entrypoints and the auth model
+(Ownable vs AccessControl), reads `owner()` and classifies it
+(renounced / EOA / contract), and exits non-zero when an inflatable supply sits
+under a single EOA. Pure classification logic is unit-tested.
 
-**Acceptance.** Given `<token> --chain`, report the mint-control surface (who,
-capped?, renounced?) and exit non-zero when mint is controlled by a single EOA
-with no cap. Pure classification logic unit-tested.
+Follow-ups since shipped: ✅ `MINTER_ROLE` holders are now enumerated
+(AccessControlEnumerable, or `RoleGranted` history as a fallback) and classified
+EOA vs contract; ✅ a supply cap (`cap()` / `maxSupply()`) is detected and read;
+✅ a FiatToken `masterMinter()` indirection is resolved and classified (it, not
+`owner()`, gates minting). No major follow-ups outstanding.
 
-## 2. `solvency --watch` — alert the moment backing breaks  **[M]**
+A sibling check, **`pause-guardian <token>`**, also shipped: who can freeze
+transfers, is the token paused now, and is the pause key a single EOA.
 
-**Why.** Real-time bridge-backing monitoring exists only as managed platforms
-(Hexagate, Forta, OZ Defender) or heavy infra; a lightweight self-hosted poller
-is the open slot (confirmed by the gap audit).
+## 2. `solvency --watch` — alert the moment backing breaks ✅ **shipped**
 
-**Approach.** Poll on an interval (re-run `solvency` per route), or subscribe to
-escrow `Transfer` + supply changes; alert via exit code / stdout / webhook when a
-route drops below `--min-ratio` or degrades by `--delta`. De-dupe alerts.
+A lightweight self-hosted alternative to managed monitoring (Hexagate, Forta, OZ
+Defender). `evmsec solvency --all --watch --interval 60 [--webhook URL]` polls on
+an interval and fires **once per breach transition** (de-duped via
+`computeTransitions` in `solvency-core.ts`), recovering quietly; clean shutdown
+on SIGINT/SIGTERM. ✅ `--delta <pp>` now also alerts on a sudden backing drop
+between observations. Still open: subscribe to escrow `Transfer` / supply-change
+events instead of polling (push, not poll).
 
-**Acceptance.** `evmsec solvency --watch --interval 60 [--webhook URL]` runs a
-loop and fires once per breach transition; clean shutdown on SIGINT.
+## 3. Multi-asset bridges — sum escrows across many tokens ✅ **shipped**
 
-## 3. Multi-asset bridges — sum escrows across many tokens  **[M]**
+A route's `lock` now accepts an **array of legs** (`{chain, escrow, token}`),
+summed — each normalized to 18 dp — against the minted supply (`sumLocked18` in
+`solvency-core.ts`). Backward-compatible: single-leg routes are unchanged. Legs
+must denominate the same unit as the minted token. Still open: differently-priced
+baskets (needs a price oracle) and multiple wrapped tokens on the mint side.
 
-**Why.** Real bridges lock many assets in one (or several) escrows; today a
-route is one asset.
+## 4. Community-verified `bridges.json` registry ✅ **shipped**
 
-**Approach.** Extend `Route` to accept arrays of `{escrow, token}` on the lock
-side and multiple wrapped tokens on the mint side; normalize and aggregate;
-report per-asset backing **and** an aggregate. Backward-compatible with the
-single-asset shape.
+Machine-enforced so the registry can't silently rot. `validateRegistry`
+(`registry-core.ts`, pure + unit-tested) checks top-level shape, kebab-case
+unique ids, known chains, **EIP-55 checksummed** escrow/token addresses (single-
+and multi-leg), and that a route claiming to be verified cites a primary-source
+URL in `notes` (mark a deliberately-illustrative entry `"verified": false` to opt
+out). `npm run validate:registry` runs it; CI gates every push/PR on it. Still
+open: a JSON Schema file for editor tooling, splitting routes into a `routes/`
+dir if it grows, and seeding several verified real routes.
 
-**Acceptance.** A multi-asset route reports each asset's backing plus a total;
-existing single-asset routes are unaffected.
-
-## 4. Community-verified `bridges.json` registry  **[S]**
-
-**Why.** The registry is only trustworthy if every address traces to a primary
-source — and that should be machine-enforced, not just documented.
-
-**Approach.** A JSON Schema for `bridges.json` + a `validate-registry` script
-wired into CI (checksummed addresses, known chains, a source URL in `notes`).
-Move routes into a `routes/` dir if it grows. PR template requiring the source.
-
-**Acceptance.** CI fails a registry PR that lacks a cited source or has a
-malformed/unchecksummed address; ships with several verified real routes.
-
-## 5. `settlement`: more intent formats  **[L]**
+## 5. `settlement`: more intent formats **[L]**
 
 **Why.** v1 is ERC-7683 only; the live volume is in protocol-specific formats,
 each with **distinct events**:
+
 - **Across** — `FundsDeposited` (origin) ↔ `FilledRelay` / `FilledV3Relay` (dest)
 - **UniswapX** — on-chain Reactor `Fill` events (Dutch orders)
 - **CoW Protocol** — `GPv2Settlement` `Trade` events (batch settlement)
@@ -73,42 +68,63 @@ each with **distinct events**:
 `parseFill(tx)` → normalized `{ recipient, token, amount, deadline }` — with one
 module per protocol under `src/protocols/`. `--protocol across|cow|uniswapx|erc7683`.
 
+**Status.** ✅ Abstraction + **ERC-7683, Across, and CoW** decoders shipped, each
+a `Protocol` plugged into the unchanged matching core and selected via
+`--protocol`. ⏸ **UniswapX deferred by design**: its Reactor `Fill` event carries
+only `(orderHash, filler, swapper, nonce)` — no output token/amount — so the
+promised outputs can't be read from logs; verifying it needs the signed order or
+the `execute()` calldata, a separate lift. 🔜 Also open: validate each decoder
+against a real mainnet settlement (the round-trip tests confirm the decoders
+match their declared ABIs; live validation was blocked here by the environment's
+`eth_getLogs` restriction).
+
 **Acceptance.** Each protocol verifies a real mainnet settlement; the core
 delivery-matching logic is reused unchanged.
 
-## 6. `settlement`: auto-discovery of the fill tx  **[M]**
+## 6. `settlement`: auto-discovery of the fill tx ✅ **shipped**
 
-**Why.** v1 makes the user supply `--fill-tx`. Auto-discovery is the convenience
-that makes it usable for auditing arbitrary intents.
-
-**Approach.** Given the intent's `orderId`/recipient, scan the destination for
-the matching fill (by `orderId` topic, or recipient transfer) over a bounded
-window; for production use, an optional indexer/Etherscan-API backend. Degrade
-gracefully and warn when a scan exceeds RPC log-range limits.
+Omit `--fill-tx` and the tool scans the destination over a bounded `--scan-blocks`
+window (chunked via `chunkRange` to survive node `getLogs` caps) for ERC-20
+deliveries of the expected token to the recipient, then picks the earliest tx
+that satisfies the output (`selectFillTx`, both pure + unit-tested in
+`discovery-core.ts`). Degrades to a clear message when nothing matches. Still
+open: an optional indexer/Etherscan-API backend for wide historical scans, and
+discovery keyed on `orderId` topics where a protocol emits them.
 
 **Acceptance.** `settlement` resolves the fill without `--fill-tx` for recent
 intents; clearly reports when it can't and falls back to manual.
 
-## 7. `settlement`: cross-chain message-proof verification  **[L]**
+## 7. Cross-chain message-proof verification ✅ **shipped** (Wormhole + Hyperlane)
 
-**Why.** v1 confirms a *token delivery*, not that a *valid attested message*
-crossed. The strongest settlement guarantees come from the messaging layer.
+Confirms a _validly attested message_ crossed, not just that tokens arrived —
+shipped as the standalone `message-proof` command (the attestation is a different
+axis from intent fills, so it's its own command rather than bolted onto
+`settlement`). Each layer is one destination-chain `eth_call`:
 
-**Approach.** Per-bridge proof checks: Wormhole **VAA**, LayerZero **DVN**
-attestation, Hyperlane **ISM**/mailbox `delivered`. Set `messageVerified=true`
-only when the underlying attestation is confirmed on the destination.
+- **Wormhole** — `Core.parseAndVerifyVM(vaa)` checks the guardian signatures.
+- **Hyperlane** — `Mailbox.delivered(messageId)` (ISM-verified + executed).
 
-**Acceptance.** For a supported messaging layer, the verdict distinguishes
-"tokens arrived" from "tokens arrived *and* the message was validly attested."
+`status = verified` only when the on-chain attestation confirms; a tampered VAA
+reads `unverified`. Verifier addresses are bundled (and were each verified live)
+for ethereum/base/arbitrum/optimism/polygon, overridable with `--contract`. The
+VAA parser + classifiers are pure and unit-tested; validated end-to-end on
+mainnet (real VAA verifies, tampered VAA rejected).
 
-## 8. `settlement diagnose` — why didn't this intent settle?  **[M]**
+⏸ **LayerZero deferred**: a specific message's DVN attestation can't be confirmed
+by a single view — it needs the message's `Origin` (srcEid, sender, nonce), the
+`payloadHash`, and the receiver's configured DVN set / verification state on the
+EndpointV2. A separate lift; the `MessageLayer` interface is ready for it.
 
-**Why.** The forensic counterpart to verification: an intent that should have
-settled but didn't.
+## 8. `settlement diagnose` — why didn't this intent settle? ✅ **shipped**
 
-**Approach.** Correlate the intent against the destination: never filled vs
-filled-late vs filled-wrong-recipient/amount. Where a continuous on-chain state
-is involved, reuse the `solvency --since` bisection to pin when it broke.
+`settlement diagnose` correlates the intent against the destination and
+classifies the failure mode — `never-filled` / `underfilled` / `filled-late` /
+`settled` — with on-chain evidence (the completing tx, how late, how short),
+exiting non-zero on anything but settled. Classifier is pure + unit-tested
+(`diagnose-core.ts`). Still open: distinguishing a **wrong-recipient** fill from
+never-filled (needs a full token-transfer scan / indexer — currently folded into
+`never-filled` with a note), and reusing the `--since` bisection for
+continuous-state intents.
 
 **Acceptance.** Given an unsettled intent, output the specific failure mode with
 the supporting on-chain evidence.

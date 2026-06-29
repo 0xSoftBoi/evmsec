@@ -182,6 +182,8 @@ export function classifyScheme(opts: { bytecode: string; isEoa?: boolean }): Sch
     scheme: "unknown",
     quantumVulnerable: null,
     confidence: "low",
-    indicators: ["no quantum-vulnerable primitive detected in bytecode — NOT a safety claim; confirm the scheme from source"],
+    indicators: [
+      "no quantum-vulnerable primitive detected in bytecode — NOT a safety claim; confirm the scheme from source",
+    ],
   };
 }
