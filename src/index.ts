@@ -6,10 +6,12 @@ import { pqReadiness } from "./commands/pq-readiness.js";
 import { mintAuthority } from "./commands/mint-authority.js";
 import { pauseGuardian } from "./commands/pause-guardian.js";
 import { messageProof } from "./commands/message-proof.js";
+import { adminPower } from "./commands/admin-power.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   solvency,
   upgradeability,
+  "admin-power": adminPower,
   settlement,
   "pq-readiness": pqReadiness,
   "mint-authority": mintAuthority,
@@ -25,6 +27,8 @@ commands:
   solvency <route-id|--all>     is a lock-and-mint bridge fully backed?
                                   (locked collateral ≥ wrapped supply minted)
   upgradeability <address>      EIP-1967 proxy check: upgradeable? who controls it?
+  admin-power <address>         who controls it — EOA / Safe (m-of-n) / timelock?
+                                  (classifies the proxy admin or owner; delay-aware)
   mint-authority <token>        can the wrapped supply be inflated, and by whom?
                                   (mint entrypoints + owner/MINTER_ROLE + cap)
   pause-guardian <token>        can transfers be frozen, are they now, and who
@@ -60,6 +64,7 @@ examples:
   evmsec solvency --lock-chain ethereum --escrow 0xEsc --token 0xUSDC \\
                   --mint-chain polygon --minted 0xWrapped --json
   evmsec upgradeability 0xToken --chain base
+  evmsec admin-power 0xProxy --chain ethereum --min-delay 48
   evmsec mint-authority 0xWrappedToken --chain polygon --json
   evmsec pause-guardian 0xWrappedToken --chain polygon
   evmsec message-proof --layer hyperlane --chain base --id 0xMessageId

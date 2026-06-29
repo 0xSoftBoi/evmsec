@@ -129,6 +129,32 @@ continuous-state intents.
 **Acceptance.** Given an unsettled intent, output the specific failure mode with
 the supporting on-chain evidence.
 
+## 9. `admin-power` — what _kind_ of authority controls a contract? ✅ **shipped**
+
+`upgradeability` resolves _who_ the admin is; `admin-power` classifies _what kind_
+it is — the factor that actually sets the blast radius. Resolves the controlling
+authority (EIP-1967 / legacy proxy admin slot, else `owner()`) and classifies it
+as a single **EOA** (critical), a **Gnosis Safe** (reads threshold/owners — 1-of-N
+is treated as a single key), a **timelock** (reads OZ `getMinDelay()` / Compound
+`delay()` — flags a zero or too-short delay against a `--min-delay` floor), an
+unrecognized **contract** (elevated — inspect), or **renounced**. Exits non-zero
+when a single key controls it. Pure logic in `authority-core.ts` is unit-tested.
+Still open (tracked in [docs/IMPROVEMENTS.md](./docs/IMPROVEMENTS.md)): Safe
+module/guard introspection, full privileged-role-graph enumeration, and a
+codehash exact-match allowlist primitive (verify a Safe is the canonical
+singleton, a 7702 delegate is a known target).
+
+---
+
+## Beyond v1 — the research-grounded plan
+
+A broader set of on-chain-readable checks (oracle hygiene, compiler-bug exposure,
+EIP-7702 delegation safety, source-verification status, guardian/validator-set
+drift baselines) plus distribution work (npm, GitHub Action, Docker, SARIF, an
+`evmsec audit <address>` meta-command) is scoped in
+[docs/IMPROVEMENTS.md](./docs/IMPROVEMENTS.md), along with where evmsec sits in
+the monitoring landscape and the validation debt to pay down.
+
 ---
 
 Contributions welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). Each item above

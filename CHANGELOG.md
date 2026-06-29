@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`admin-power <address>` command**: answers not just _who_ controls a contract
+  (as `upgradeability` does) but _what kind_ of authority it is — the question
+  that decides the blast radius. Resolves the controlling authority (EIP-1967 /
+  legacy proxy admin slot, else `owner()`) and classifies it: a single **EOA**
+  (critical, fails CI), a **Gnosis Safe** (reads `getThreshold()`/`getOwners()` —
+  a 1-of-N Safe is treated as a single key and fails CI; m-of-n reads info with
+  the threshold shown), a **timelock** (reads OZ `getMinDelay()` or Compound-style
+  `delay()` — a delay of 0 or below the `--min-delay` floor, default 24h, is
+  elevated), an unrecognized **contract** (elevated — inspect; may be a ProxyAdmin
+  or custom controller), or **renounced** (zero address). Exits non-zero when a
+  single key controls the contract. Pure classification logic
+  (`authority-core.ts`) is unit-tested offline.
 - **`message-proof` command**: verifies that a cross-chain message was _validly
   attested_ (not just that tokens arrived) by checking the attestation on the
   destination via a single `eth_call` — Wormhole `Core.parseAndVerifyVM(vaa)`

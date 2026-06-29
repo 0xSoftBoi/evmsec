@@ -128,6 +128,41 @@ Reads EIP-1967 slots: is it an upgradeable proxy, what's the implementation, and
 is the upgrade admin a single EOA (one key from a rug) or a contract
 (multisig/timelock)? Add `--json` to drop it into CI.
 
+### `admin-power` — who controls it, and how dangerous is that control?
+
+`upgradeability` tells you _whether_ a contract has an admin and resolves _who_
+it is. `admin-power` answers the question that actually decides the blast radius:
+**what _kind_ of authority is that, and is it a single point of failure?** A
+contract address as the admin is not reassuring on its own — a "multisig" that's
+really 1-of-N is one key, and a timelock with a zero delay gives you no window to
+react to a malicious upgrade.
+
+```bash
+npm run evmsec -- admin-power 0xProxy --chain ethereum [--min-delay 48] [--json]
+```
+
+It resolves the controlling authority (EIP-1967 / legacy proxy admin slot, else
+`owner()`) and classifies it from on-chain reads:
+
+- **EOA** — a single externally-owned key → `critical`, fails CI.
+- **Gnosis Safe** — reads `getThreshold()` / `getOwners()`. A `1-of-N` Safe is
+  effectively a single key → `critical`, fails CI; an `m-of-n` (m ≥ 2) reads
+  `info` with the threshold shown.
+- **Timelock** — reads `getMinDelay()` (OZ `TimelockController`) or `delay()`
+  (Compound-style). A delay of 0 or below the `--min-delay` floor (default 24h)
+  is `elevated` — too short an exit window; at/above the floor it's `info`.
+- **Unrecognized contract** — `elevated`: it may be a `ProxyAdmin` or custom
+  controller; inspect it (re-run on its `owner()`).
+- **Zero address** — renounced.
+
+```bash
+evmsec admin-power 0xProxy --min-delay 48 || alert "proxy is single-key controlled"
+```
+
+Honestly scoped like the others: a heuristic from on-chain reads, not a proof of
+the full privileged-role set — confirm against source. Pure classification logic
+(`authority-core.ts`) is unit-tested offline.
+
 ### `mint-authority` — can the wrapped supply be inflated, and by whom?
 
 `solvency` says a bridge is backed _now_. But a token can read 100% backed today
@@ -327,6 +362,7 @@ src/
   settlement-core.ts         pure delivery-matching + verdict logic (protocol-agnostic)
   protocols/                 pluggable settlement decoders (Protocol interface; erc7683, across, cow)
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
+  authority-core.ts          pure authority classification (EOA / Safe / timelock → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification
   *-core.test.ts             unit tests for the pure cores (no network)
@@ -334,6 +370,7 @@ src/
   commands/
     solvency.ts              flagship: lock-vs-mint backing check
     upgradeability.ts        EIP-1967 / legacy proxy admin risk
+    admin-power.ts           what kind of authority controls it (EOA/Safe/timelock)?
     mint-authority.ts        who can inflate the wrapped supply?
     pause-guardian.ts        who can freeze transfers?
     settlement.ts            cross-chain intent fill verification (erc7683/across/cow)
