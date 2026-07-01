@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **USD valuation of bridge backing (on-chain Chainlink).** `solvency` now prices
+  each route's locked/minted collateral in dollars — `$1.18B locked · $1.17B minted`,
+  and the **deficit in USD** on a breach — by reading canonical Chainlink aggregators
+  on Ethereum mainnet at check time (no external API, no key). Stablecoins are priced
+  off their real `USDC/USD` / `DAI/USD` feeds (a depeg shows up instead of hiding
+  behind an assumed `$1`); WBTC values via `BTC/USD` and cbETH composes
+  `cbETH/ETH × ETH/USD`. All feed addresses were verified live before pinning. USD is
+  best-effort — a price hiccup never masks the backing verdict. New `priceUsd` /
+  `lockedUsd` / `mintedUsd` / `deltaUsd` / `pricedVia` fields in `--json`; the pure
+  math (`usd-core.ts`) is unit-tested. `STATUS.md` gains a **Value** column and a
+  total-collateral headline, `STATUS.json` carries per-route `lockedUsd` +
+  `totalLockedUsd`, and the badge shows tracked TVL (e.g. **bridges: 9/9 backed · $2.50B**).
+
 - **Machine-readable status feed + live badge.** `npm run gen:status` now emits,
   alongside `STATUS.md`, a `STATUS.json` feed (`{ generatedAt, overall, backed,
 breached, errored, total, routes[] }`) that any monitor or dashboard can consume,

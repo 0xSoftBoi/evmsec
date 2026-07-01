@@ -1,10 +1,11 @@
 {
-  "generatedAt": "2026-07-01T11:13:59.538Z",
+  "generatedAt": "2026-07-01T11:29:12.232Z",
   "overall": "backed",
   "backed": 9,
   "breached": 0,
   "errored": 0,
   "total": 9,
+  "totalLockedUsd": 2497497515,
   "routes": [
     {
       "id": "polygon-pos-usdc",
@@ -15,7 +16,9 @@
       "locked": "1185015109.428497",
       "minted": "1173847652.901382",
       "ratioPct": 100.9513,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 1184505553,
+      "pricedVia": "USDC/USD"
     },
     {
       "id": "polygon-pos-dai",
@@ -26,7 +29,9 @@
       "locked": "593127050.026279229490065366",
       "minted": "566011643.789301575866703297",
       "ratioPct": 104.7906,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 592986431,
+      "pricedVia": "DAI/USD"
     },
     {
       "id": "polygon-pos-wbtc",
@@ -37,7 +42,9 @@
       "locked": "1990.83371779",
       "minted": "1960.81680994",
       "ratioPct": 101.5308,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 116604830,
+      "pricedVia": "BTC/USD"
     },
     {
       "id": "arbitrum-dai-maker",
@@ -48,7 +55,9 @@
       "locked": "18658230.60964007199519816",
       "minted": "18608646.873200213015590972",
       "ratioPct": 100.2664,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 18653807,
+      "pricedVia": "DAI/USD"
     },
     {
       "id": "arbitrum-wbtc-gateway",
@@ -59,7 +68,9 @@
       "locked": "7214.381581",
       "minted": "7205.33615837",
       "ratioPct": 100.1255,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 422552488,
+      "pricedVia": "BTC/USD"
     },
     {
       "id": "arbitrum-link-gateway",
@@ -70,7 +81,9 @@
       "locked": "2232735.309035554668784095",
       "minted": "2220406.464403305983836283",
       "ratioPct": 100.5552,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 16107272,
+      "pricedVia": "LINK/USD"
     },
     {
       "id": "optimism-wbtc-bridge",
@@ -81,7 +94,9 @@
       "locked": "797.57943006",
       "minted": "782.88163931",
       "ratioPct": 101.8773,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 46714908,
+      "pricedVia": "BTC/USD"
     },
     {
       "id": "base-dai-bridge",
@@ -92,7 +107,9 @@
       "locked": "2135562.779574551080069738",
       "minted": "2131164.487574497454248764",
       "ratioPct": 100.2063,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 2135056,
+      "pricedVia": "DAI/USD"
     },
     {
       "id": "base-cbeth-bridge",
@@ -103,7 +120,9 @@
       "locked": "54648.83703890018524489",
       "minted": "54491.892667460534402953",
       "ratioPct": 100.288,
-      "verdict": "BACKED"
+      "verdict": "BACKED",
+      "lockedUsd": 97237168,
+      "pricedVia": "cbETH/ETH × ETH/USD"
     }
   ]
 }

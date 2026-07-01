@@ -17,6 +17,7 @@ import {
 } from "../lib.js";
 import { Route, LockLeg, loadRoutes, findRoute, lockLegs } from "../bridges.js";
 import { sumLocked18, isRouteFailing, computeTransitions, computeDegrades } from "../solvency-core.js";
+import { AGGREGATOR_ABI, fmtUsd, priceRouteFor, priceFromHops, usdValue, type HopReading } from "../usd-core.js";
 
 /** How many routes `--all` checks at once (override via EVMSEC_CONCURRENCY). */
 const ROUTE_CONCURRENCY = Number(process.env.EVMSEC_CONCURRENCY) || 5;
@@ -34,6 +35,16 @@ interface SolvencyResult {
   verdict: "BACKED" | "UNDERCOLLATERALIZED" | "NO_SUPPLY" | "ERROR";
   /** Present only when verdict is ERROR — the read that failed. */
   error?: string;
+  /**
+   * USD valuation via Chainlink — best-effort. Absent when no feed covers the
+   * asset or a price read failed; a missing price never fails the backing check.
+   */
+  priceUsd?: number;
+  lockedUsd?: number;
+  mintedUsd?: number;
+  deltaUsd?: number;
+  /** Feed provenance, e.g. "BTC/USD" or "cbETH/ETH × ETH/USD". */
+  pricedVia?: string;
 }
 
 /**
@@ -299,6 +310,53 @@ function isBreach(m: Measurement, minRatio: number): boolean {
   return isUnderBacked(m.locked18, m.minted18, minRatio);
 }
 
+// ── USD valuation (best-effort, Chainlink on-chain) ─────────────────────────
+
+/** Per-run cache so shared feeds (WBTC×3, DAI×3…) are read once, not per route. */
+const feedCache = new Map<string, Promise<HopReading>>();
+
+function readFeed(address: string): Promise<HopReading> {
+  let p = feedCache.get(address);
+  if (!p) {
+    const agg = new Contract(address, AGGREGATOR_ABI, getProvider(chain("ethereum")));
+    p = (async (): Promise<HopReading> => {
+      const [rd, dec] = await Promise.all([
+        withRetry(() => agg.latestRoundData(), { label: "latestRoundData" }) as Promise<[bigint, bigint]>,
+        withRetry(() => agg.decimals(), { label: "feed decimals" }).then(Number),
+      ]);
+      return { answer: rd[1], decimals: dec };
+    })();
+    feedCache.set(address, p);
+  }
+  return p;
+}
+
+/** Value a route's locked/minted amounts in USD, or return undefined if we can't. */
+async function priceRoute(
+  asset: string,
+  locked18: bigint,
+  minted18: bigint,
+): Promise<Pick<SolvencyResult, "priceUsd" | "lockedUsd" | "mintedUsd" | "deltaUsd" | "pricedVia"> | undefined> {
+  const route = priceRouteFor(asset);
+  if (!route) return undefined;
+  try {
+    const readings = await Promise.all(route.hops.map((h) => readFeed(h.address)));
+    const price = priceFromHops(readings);
+    if (price === null) return undefined;
+    const lockedUsd = usdValue(locked18, price);
+    const mintedUsd = usdValue(minted18, price);
+    return {
+      priceUsd: price,
+      lockedUsd,
+      mintedUsd,
+      deltaUsd: lockedUsd - mintedUsd,
+      pricedVia: route.hops.map((h) => h.pair).join(" × "),
+    };
+  } catch {
+    return undefined; // a price hiccup must never mask the backing verdict
+  }
+}
+
 // ── point-in-time check ─────────────────────────────────────────────────────
 
 async function checkRoute(route: Route): Promise<SolvencyResult> {
@@ -316,6 +374,7 @@ async function checkRoute(route: Route): Promise<SolvencyResult> {
   }
 
   const d = m.locked18 - m.minted18;
+  const usd = await priceRoute(route.asset, m.locked18, m.minted18);
   return {
     id: route.id,
     bridge: route.bridge,
@@ -327,6 +386,7 @@ async function checkRoute(route: Route): Promise<SolvencyResult> {
     ratioPct,
     delta: `${d >= 0n ? "+" : "-"}${formatUnits(d < 0n ? -d : d, 18)}`,
     verdict,
+    ...usd,
   };
 }
 
@@ -513,6 +573,13 @@ function render(results: SolvencyResult[], minRatio: number): void {
     console.log(`  locked   ${r.locked}  (${r.lockChain})`);
     console.log(`  minted   ${r.minted}  (${r.mintChain})`);
     console.log(`  backing  ${ratioStr}    delta ${r.delta}`);
+    if (r.lockedUsd != null) {
+      const deficit =
+        r.verdict === "UNDERCOLLATERALIZED" && r.deltaUsd != null ? `   deficit ${fmtUsd(r.deltaUsd)}` : "";
+      console.log(
+        `  value    ${fmtUsd(r.lockedUsd)} locked  ·  ${fmtUsd(r.mintedUsd ?? 0)} minted${deficit}  [${r.pricedVia}]`,
+      );
+    }
     console.log(
       `  verdict  ${r.verdict}${r.verdict === "UNDERCOLLATERALIZED" ? "  ⚠ bridge is printing unbacked supply" : ""}`,
     );
