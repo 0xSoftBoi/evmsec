@@ -228,12 +228,21 @@ npm run evmsec -- solvency \
   --mint-chain polygon  --minted 0xWrappedUSDC --json
 ```
 
-Reports locked vs minted, the backing ratio, and a verdict. **Exit code is
-non-zero when undercollateralized**, so it drops straight into CI or a cron:
+Reports locked vs minted, the backing ratio, a **USD valuation**, and a verdict.
+**Exit code is non-zero when undercollateralized**, so it drops straight into CI
+or a cron:
 
 ```bash
 */5 * * * * evmsec solvency --all || alert "bridge backing breached"
 ```
+
+The dollar figures — `$1.18B locked · $1.17B minted`, or the deficit on a breach —
+come from **on-chain Chainlink price feeds** read at check time (no external API,
+no key). Stablecoins are priced off their real `USDC/USD` / `DAI/USD` feeds rather
+than assumed `== $1`, so a depeg shows in the number; WBTC values via `BTC/USD`
+(the WBTC↔BTC peg is a custody assumption, independent of this backing check) and
+cbETH composes `cbETH/ETH × ETH/USD`. A price hiccup never masks the backing
+verdict — the USD fields simply drop out.
 
 **`bridges.json` ships with real, live-verified routes** so `solvency --all`
 works out of the box — 9 routes across **Polygon PoS, Arbitrum, OP Mainnet, and
