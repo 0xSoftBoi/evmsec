@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-07-01T11:33:42.795Z",
+  "generatedAt": "2026-07-01T11:42:07.076Z",
   "overall": "backed",
-  "backed": 9,
+  "backed": 11,
   "breached": 0,
   "errored": 0,
-  "total": 9,
-  "totalLockedUsd": 2497497515,
+  "total": 11,
+  "totalLockedUsd": 2512380138,
   "routes": [
     {
       "id": "polygon-pos-usdc",
@@ -39,11 +39,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1990.83371779",
+      "locked": "1990.36898149",
       "minted": "1960.81680994",
-      "ratioPct": 101.5308,
+      "ratioPct": 101.5071,
       "verdict": "BACKED",
-      "lockedUsd": 116604830,
+      "lockedUsd": 116577610,
       "pricedVia": "BTC/USD"
     },
     {
@@ -123,6 +123,32 @@
       "verdict": "BACKED",
       "lockedUsd": 97237168,
       "pricedVia": "cbETH/ETH × ETH/USD"
+    },
+    {
+      "id": "base-usdbc",
+      "bridge": "Base (canonical bridge)",
+      "asset": "USDbC",
+      "lockChain": "Ethereum",
+      "mintChain": "Base",
+      "locked": "6366351.791381",
+      "minted": "6167980.167841",
+      "ratioPct": 103.2161,
+      "verdict": "BACKED",
+      "lockedUsd": 6363614,
+      "pricedVia": "USDC/USD"
+    },
+    {
+      "id": "scroll-usdc",
+      "bridge": "Scroll (canonical bridge)",
+      "asset": "USDC.e",
+      "lockChain": "Ethereum",
+      "mintChain": "Scroll",
+      "locked": "8549905.284415",
+      "minted": "7826195.204708",
+      "ratioPct": 109.2472,
+      "verdict": "BACKED",
+      "lockedUsd": 8546229,
+      "pricedVia": "USDC/USD"
     }
   ]
 }

@@ -56,12 +56,23 @@ export const PRICE_FEEDS: Record<string, PriceRoute> = {
   },
 };
 
-/** Strip a bridged-variant suffix and upper-case: "USDC.e" → "USDC", "cbETH" → "CBETH". */
+/** Bridged-variant labels that price the same as a canonical asset. */
+const ALIASES: Record<string, string> = {
+  USDBC: "USDC", // Base's bridged USDC
+  "USDC.E": "USDC",
+  WBTC: "WBTC",
+};
+
+/**
+ * Canonical pricing key for an asset label: strip a bridged-variant suffix,
+ * upper-case, then fold known aliases (USDbC/USDC.e → USDC). "cbETH" → "CBETH".
+ */
 export function normalizeAsset(asset: string): string {
-  return asset
+  const base = asset
     .trim()
     .replace(/\.(e|b)$/i, "")
     .toUpperCase();
+  return ALIASES[base] ?? base;
 }
 
 /** The pricing route for an asset symbol, or undefined if we can't value it. */

@@ -1,6 +1,15 @@
 import "dotenv/config";
 
-export type ChainKey = "ethereum" | "base" | "arbitrum" | "optimism" | "polygon" | "base-sepolia" | "sepolia";
+export type ChainKey =
+  | "ethereum"
+  | "base"
+  | "arbitrum"
+  | "optimism"
+  | "polygon"
+  | "linea"
+  | "scroll"
+  | "base-sepolia"
+  | "sepolia";
 
 export interface ChainConfig {
   key: ChainKey;
@@ -59,6 +68,22 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     rpcUrl: rpc("POLYGON_RPC_URL", "https://polygon-bor-rpc.publicnode.com"),
     explorer: "https://polygonscan.com",
     symbol: "POL",
+  },
+  linea: {
+    key: "linea",
+    name: "Linea",
+    chainId: 59144,
+    rpcUrl: rpc("LINEA_RPC_URL", "https://rpc.linea.build"),
+    explorer: "https://lineascan.build",
+    symbol: "ETH",
+  },
+  scroll: {
+    key: "scroll",
+    name: "Scroll",
+    chainId: 534352,
+    rpcUrl: rpc("SCROLL_RPC_URL", "https://rpc.scroll.io"),
+    explorer: "https://scrollscan.com",
+    symbol: "ETH",
   },
   "base-sepolia": {
     key: "base-sepolia",
