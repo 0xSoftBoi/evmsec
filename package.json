@@ -14,11 +14,13 @@
   },
   "homepage": "https://github.com/0xSoftBoi/evmsec#readme",
   "bin": {
-    "evmsec": "dist/index.js"
+    "evmsec": "dist/index.js",
+    "evmsec-mcp": "dist/mcp.js"
   },
   "files": [
     "dist",
     "bridges.json",
+    "deps.example.json",
     "README.md",
     "LICENSE"
   ],
@@ -53,6 +55,7 @@
     "audit"
   ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^16.4.7",
     "ethers": "^6.13.5"
   },

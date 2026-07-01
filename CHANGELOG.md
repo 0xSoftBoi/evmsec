@@ -8,6 +8,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`deps` command — audit your on-chain dependencies.** Reframes the audit from
+  "a contract" to "every external contract your protocol trusts" (the USDC you
+  hold, the Chainlink feed you price off, the bridge you route through — your
+  on-chain supply chain). Reads a `deps.json` manifest (`--file` / `EVMSEC_DEPS` /
+  positional; see `deps.example.json`), runs the full audit family against each
+  entry, and rolls the results into one verdict with a per-dependency report card.
+  Exits non-zero when any dependency has a blocking finding (`--fail-on` sets the
+  bar), so a dependency quietly becoming single-key-controlled fails your CI.
+  `--json` / `--sarif` emit the aggregate (SARIF now spans multiple targets).
+  Manifest validation (`deps-core.ts`) is pure and unit-tested. A new
+  `assessTarget()` in `checks/run.ts` is the shared "fetch bytecode once → run
+  checks" core behind `audit`, `deps`, and the MCP server.
+- **MCP server (`evmsec-mcp`)** — exposes the checks as [Model Context
+  Protocol](https://modelcontextprotocol.io) tools over stdio, so an AI agent can
+  ask "is this contract safe to interact with?" before signing, or fold an
+  on-chain-state audit into a workflow. Tools: `audit_contract { address, chain? }`
+  (structured verdict + per-check findings + evidence, with an explicit heuristic
+  disclaimer) and `list_supported_chains`. `stdout` is the protocol channel;
+  logging goes to `stderr`. Ships as a second `bin`; wire it in with
+  `npx -y evmsec-mcp`.
+
 - **`freeze-authority <token>` command + check**: the targeted-censorship sibling
   of `pause-guardian` — can an _individual_ holder be frozen (or their balance
   seized), and who holds that power? Detects the two dominant on-chain patterns:
