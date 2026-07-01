@@ -14,11 +14,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   harness captures the exact on-chain reads a check makes (at the ethers
   `_perform` choke point) against a named contract, commits them, and replays them
   through the **real** assessors with no network. Pinned so far: USDC (proxy admin
-  is a single EOA → `admin-power` critical), USDT / WBTC (owner is an unrecognized
-  controller → warning, not a rubber-stamp), Compound cUSDC (admin via a
-  non-standard getter → reported unresolved, a documented blind spot), and DAI
-  (not a proxy → no false upgradeability alarm). A drifting heuristic now fails
-  CI. Regenerate with `npm run capture:fixtures`.
+  is a bare EOA on-chain → `admin-power` critical), USDT / WBTC (owner is an
+  unrecognized controller → warning, not a rubber-stamp), Ethena USDe (a real
+  5-of-10 Gnosis Safe → `ok`; exercises the live `getThreshold`/`getOwners` path
+  and guards against over-flagging reasonable multisigs), Compound cUSDC (admin
+  via a non-standard getter → reported unresolved, a documented blind spot), and
+  DAI (not a proxy → no false upgradeability alarm). A drifting heuristic now
+  fails CI. Regenerate with `npm run capture:fixtures`. Replay fidelity was
+  checked directly (every replayed read hits a recording — zero cache misses — so
+  the tests aren't vacuously green).
 - **Check framework + SARIF/JSON for every contract check** (`src/check.ts`,
   `src/checks/`): the six contract-audit checks are now each a `Check` over a
   shared `CheckContext` (bytecode fetched **once** and reused across checks),
@@ -56,13 +60,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bytecode's CBOR metadata trailer (following the proxy to its implementation)
   and matches it against the Solidity team's own published `bugs.json` /
   `bugs_by_version.json` (bundled in `src/data/solc-bugs.ts`, regenerated with
-  `npm run gen:solc-bugs`). Each finding links to the official writeup. Exits
-  non-zero when a high-severity bug applies _unconditionally_ to that version;
-  condition-gated bugs (viaIR/optimizer/evmVersion) read elevated with their
-  conditions surfaced, since applicability can't always be read from bytecode. A
-  contract that strips metadata or predates CBOR tags reports "version not found"
-  rather than guessing. Pure logic (`compiler-core.ts`) is unit-tested; validated
-  live (USDC's 0.6.12 implementation, pre-CBOR WETH).
+  `npm run gen:solc-bugs`). Each finding links to the official writeup.
+  Condition-gated bugs (viaIR/optimizer/evmVersion) read `warning` with their
+  conditions surfaced, since applicability can't be read from bytecode. In
+  practice this is a **warning-level check**: every high-severity solc bug in the
+  CBOR-metadata era (≥0.4.22) is condition-gated, so the `critical`
+  (unconditional-high) path — while implemented and unit-tested — effectively
+  never fires for a real modern contract. A contract that strips metadata or
+  predates CBOR tags reports "version not found" rather than guessing. Pure logic
+  (`compiler-core.ts`) is unit-tested; validated live (USDC's 0.6.12
+  implementation, pre-CBOR WETH).
 - **`oracle-hygiene <feed>` command**: is a Chainlink-style price feed fresh and
   safe to read _right now_? Pulls `latestRoundData()` and flags the failure modes
   a consumer can't see when it blindly trusts the price — a **stale** answer
@@ -174,12 +181,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   security tool saying "I couldn't tell who controls this" shouldn't look like a
   pass. Renounced (zero address) still reads `ok`. Pinned by the DAI / cUSDC
   incident fixtures.
-- **Sharper Safe-threshold heuristic**: `admin-power` no longer waves through any
-  m-of-n multisig with m ≥ 2. A threshold below 3, or one that isn't a majority of
-  the owners, now reads `⚠ WARNING` (low threshold) — so a 2-of-5 Safe, the exact
-  shape of the Harmony Horizon bridge drained for ~$100M, is flagged instead of
-  passing. 1-of-N is still `critical`; a solid majority (e.g. 3-of-5, 4-of-7) is
-  still `info`. Pure logic in `authority-core.ts`, unit-tested.
+- **Safe-threshold heuristic — now conservative, and honestly framed**: an
+  earlier iteration of this changelog claimed the check flags a 2-of-5 Safe "the
+  exact shape of the Harmony Horizon bridge." That was doubly wrong: Harmony's
+  bridge was a **custom** 2-of-5, not a Gnosis Safe (this path never classifies
+  it), and the rule as written also flagged ordinary configs like a 5-of-10 Safe
+  (real example: Ethena USDe) as a warning. Corrected: `admin-power` flags a
+  Gnosis Safe only when the threshold is a **strict minority** of signers
+  (`2·threshold < owners`, e.g. 2-of-5, 4-of-10); a threshold at least half
+  (2-of-3, 3-of-5, 5-of-10) is `info`. 1-of-N is still `critical`. The summary now
+  states plainly that threshold is a _weak_ signal — Ronin was 5-of-9 (a majority)
+  and still lost $625M. Pinned by the Ethena USDe fixture (a real 5-of-10 Safe →
+  `ok`). Pure logic in `authority-core.ts`, unit-tested.
 - **Unified, sharper check output**: every contract-audit command now renders
   through the shared framework — a consistent severity-marked report with
   structured evidence (addresses get explorer links) and a report card for

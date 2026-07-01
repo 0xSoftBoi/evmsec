@@ -62,6 +62,15 @@ const SPECS: Spec[] = [
     expect: { "admin-power": "warning", upgradeability: "ok" },
   },
   {
+    name: "ethena-usde",
+    description:
+      "Ethena USDe — controlled by a real Gnosis Safe. Exercises the Safe path (getThreshold/getOwners) on live data: its threshold is at least half the signers, so admin-power reports it as a reasonable config (info), NOT a low-threshold warning. Guards against the earlier bug that flagged any non-strict-majority (e.g. 5-of-10) Safe.",
+    source: "https://etherscan.io/address/0x4c9EDD5852cd905f086C759E8383e09bff1E68B3#readContract",
+    chain: "ethereum",
+    address: "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+    expect: { "admin-power": "ok" },
+  },
+  {
     name: "compound-cusdc",
     description:
       "Compound cUSDC (CErc20Delegator). Its admin lives behind Compound's non-standard `admin()` getter — not EIP-1967 or Ownable — so admin-power reports it as unresolved (a documented blind spot: evmsec resolves EIP-1967 proxy admins and `owner()`, not every custom scheme). Pins that we warn rather than falsely pass.",

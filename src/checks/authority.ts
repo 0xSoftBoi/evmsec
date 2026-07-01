@@ -45,19 +45,27 @@ export const authorityCheck: Check = {
     if (safe) evidence.multisig = `${safe.threshold}-of-${safe.owners}`;
     if (delaySec !== null) evidence["timelock delay"] = `${delaySec}s`;
 
-    // "unknown" means we could not resolve a controller (no EIP-1967 admin, no
-    // owner()) — that's a review item, not a clean pass: a contract may still be
-    // controlled through a non-standard admin (Compound-style `admin()`) or
-    // AccessControl roles that this check doesn't resolve. Renounced (zero) stays ok.
+    // "unknown" = we could not resolve a controller via the two patterns this
+    // check understands (EIP-1967 admin slot, `owner()`). We fail *closed* — a
+    // security tool shouldn't show a green pass for "I couldn't tell who controls
+    // this" — but this is explicitly NOT an accusation: the target may be
+    // immutable, renounced elsewhere, or governed by a DAO / AccessControl roles /
+    // a Compound-style `admin()` that this check does not resolve. Expect it on
+    // many well-run contracts (Curve, Frax, Balancer all land here). Renounced
+    // (zero address) is a clean ok.
     const severity: Severity = verdict.fail
       ? "critical"
       : verdict.risk === "elevated" || verdict.kind === "unknown"
         ? "warning"
         : "ok";
 
-    const notes = ["confirm the full privileged-role set against source — this resolves one controlling authority."];
+    const notes = [
+      "confirm the full privileged-role set against source — this resolves at most one controlling authority.",
+    ];
     if (verdict.kind === "unknown")
-      notes.push("no EIP-1967 admin or owner() found — control may live in a custom scheme; inspect directly.");
+      notes.push(
+        "NOT ASSESSED — no EIP-1967 admin or owner() found. Could be immutable/renounced, or DAO/AccessControl/custom governance this check doesn't resolve. Inspect manually; don't read this as a confirmed risk.",
+      );
 
     return report({ id: this.id, title: this.title, severity, summary: verdict.summary, evidence, notes });
   },

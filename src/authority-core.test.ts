@@ -41,20 +41,25 @@ test("classifyAuthority: healthy majority Safe (3-of-5) → info, no fail", () =
   assert.ok(v.summary.includes("3-of-5"));
 });
 
-test("classifyAuthority: low-threshold Safe (2-of-5, Harmony-class) → elevated, no hard fail", () => {
+test("classifyAuthority: strict-minority Safe (2-of-5) → elevated, no hard fail", () => {
   const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 2, owners: 5 } });
   assert.equal(v.kind, "safe");
   assert.equal(v.risk, "elevated");
   assert.equal(v.fail, false);
-  assert.ok(v.summary.toLowerCase().includes("low threshold"));
+  assert.ok(v.summary.toLowerCase().includes("minority"));
 });
 
-test("classifyAuthority: 2-of-3 Safe is below the floor → elevated", () => {
+test("classifyAuthority: 2-of-3 Safe is a majority → info (not flagged — avoids noise)", () => {
   const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 2, owners: 3 } });
-  assert.equal(v.risk, "elevated");
+  assert.equal(v.risk, "info");
 });
 
-test("classifyAuthority: minority-but-≥3 Safe (3-of-7) → elevated (not a majority)", () => {
+test("classifyAuthority: exactly-half Safe (5-of-10, e.g. Ethena) → info (not a minority)", () => {
+  const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 5, owners: 10 } });
+  assert.equal(v.risk, "info");
+});
+
+test("classifyAuthority: strict-minority Safe (3-of-7) → elevated", () => {
   const v = classifyAuthority({ address: ADDR, isEoa: false, safe: { threshold: 3, owners: 7 } });
   assert.equal(v.risk, "elevated");
 });

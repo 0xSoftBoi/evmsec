@@ -86,29 +86,44 @@ one records the exact on-chain reads against a real mainnet contract
 assessors (`src/incident-fixtures.test.ts`), so a heuristic can't drift without a
 test going red. Regenerate with `npm run capture:fixtures`.
 
-_Flags real single-key / unresolved control:_
+_Reports a real on-chain property:_
 
 - **USDC** (`0xA0b8…eB48`) → `admin-power: ✗ CRITICAL`. Its FiatTokenProxy upgrade
-  admin (`0x807a…95d2`) is a **single externally-owned key**, not a multisig
-  (verify: that address has no code) — one key can replace the implementation
-  behind one of the largest tokens on Ethereum.
-- **USDT** and **WBTC** → `admin-power: ⚠ WARNING`. Their owners are custom
-  controller contracts that are **not** a recognized Gnosis Safe or timelock, so
-  the tool flags them for inspection instead of rubber-stamping "it's a contract."
-- **cUSDC** → `admin-power: ⚠ WARNING`. Compound gates admin through a
-  non-standard `admin()` getter evmsec doesn't resolve — so it reports the
-  controller as **unresolved** rather than falsely passing. (A documented blind
-  spot, pinned as one.)
+  admin (`0x807a…95d2`) is a **plain EOA** on-chain, with no on-chain timelock or
+  multisig gating the upgrade (verify: that address has no code). Read this
+  precisely: it means the upgrade is protected **only** by whatever off-chain key
+  custody Circle uses — an EOA can be backed by MPC/HSM/multi-party signing that
+  evmsec **cannot see**. The critical rating is about what's _enforced on-chain_,
+  not a claim that one person holds a hot key. (See [Limitations](#limitations).)
+- **USDT** and **WBTC** → `admin-power: ⚠ WARNING`. Their owners are contracts that
+  are **not** a recognized Gnosis Safe or timelock, so the tool flags them for
+  inspection rather than rubber-stamping "it's a contract" — it doesn't claim to
+  know what those controllers are.
 
-_Doesn't cry wolf:_
+_Doesn't cry wolf on reasonable setups:_
 
-- **DAI** → `upgradeability: ✓ ok` — correctly identified as **not** a proxy (no
-  false "upgradeable" alarm).
+- **DAI** → `upgradeability: ✓ ok` — correctly identified as **not** a proxy.
+- **Ethena USDe** → `admin-power: ✓ ok`. Its controller is a real **5-of-10 Gnosis
+  Safe**; the tool reads the threshold live (`getThreshold`/`getOwners`) and does
+  **not** flag it — a threshold at least half the signers is an ordinary config.
+  (An earlier version wrongly flagged this; the fixture now guards against it.)
 
-_Sharper than a naive check:_ a **2-of-5 Safe** — the configuration of the Harmony
-Horizon bridge, drained for ~$100M in 2022 after two signer keys were compromised
-— now reads `⚠ WARNING` (a low threshold), where "any m-of-n ≥ 2 is fine" would
-have waved it through.
+_Honestly scoped where it's blind:_
+
+- **cUSDC** → `admin-power: ⚠ WARNING (not assessed)`. Compound gates admin through
+  a non-standard `admin()` getter evmsec doesn't resolve, so it reports the
+  controller as **unresolved** rather than a green pass — a documented blind spot,
+  pinned as one. Expect the same on DAO-governed tokens (Curve, Frax, Balancer):
+  the tool doesn't understand every governance scheme and says so.
+
+**On the Safe threshold heuristic — a deliberately weak signal.** evmsec flags a
+Gnosis Safe only when the threshold is a _strict minority_ of signers (fewer than
+half, e.g. 2-of-5). But threshold is a poor predictor of safety: **Ronin's bridge
+was 5-of-9 — a majority — and was still drained for $625M** via key compromise,
+and **Harmony's was a custom 2-of-5 that isn't even a Gnosis Safe** (evmsec would
+flag it as an unrecognized controller, not via this path). Signer independence and
+key custody matter far more than the ratio; the heuristic is a nudge to look, not
+a verdict.
 
 ### `solvency` — is the bridge backed?
 
@@ -330,16 +345,19 @@ Reads the solc version from the metadata (following the proxy to its
 implementation, since that's where the logic and its compiler live) and matches
 it against the Solidity team's own `bugs.json` / `bugs_by_version.json`
 (bundled — regenerate with `npm run gen:solc-bugs`). Each finding links to the
-official writeup. **Exit code is non-zero when a high-severity bug applies
-unconditionally to that version.**
+official writeup.
 
-Honest about the boundary: a bug being present in the compiler version is
-necessary but not always sufficient — many bugs only bite under specific compile
-settings (`viaIR`, optimizer, `evmVersion`) that aren't always readable from
-bytecode. Those condition-gated bugs read `elevated, verify` rather than a hard
-failure, and the conditions are surfaced. A contract that strips metadata, is
-Vyper/assembly, or predates CBOR tags reports "version not found" rather than
-guessing. Pure logic in `compiler-core.ts` is unit-tested offline.
+**In practice this is a warning-level check, and the README should say so.** A
+bug being present in the compiler version is necessary but not sufficient — most
+bite only under specific compile settings (`viaIR`, optimizer, `evmVersion`) that
+can't be read from bytecode, so they read `⚠ WARNING (verify)` with the
+conditions surfaced. In fact _every_ high-severity solc bug from the CBOR-metadata
+era (≥0.4.22) is condition-gated, so the `critical` / non-zero-exit path — though
+implemented and tested — effectively never fires for a real modern contract. Use
+this to learn "your compiler is subject to X, go check the conditions," not as a
+hard gate. A contract that strips metadata, is Vyper/assembly, or predates CBOR
+tags reports "version not found" rather than guessing. Pure logic in
+`compiler-core.ts` is unit-tested offline.
 
 ### `verification-status` — is this contract's source verified?
 
@@ -490,6 +508,43 @@ retry on transient errors only — timeouts, 429s, 5xx, resets — while real er
 `solvency --all` checks routes with bounded concurrency (`EVMSEC_CONCURRENCY`,
 default 5) and isolates per-route failures: one unreadable route is reported as
 `ERROR` and fails the exit code, without masking the others.
+
+## Limitations
+
+evmsec reads on-chain state and applies opinionated rules. That's its whole
+value — and its ceiling. Be clear-eyed about what it **cannot** see:
+
+- **An EOA on-chain ≠ a single hot key.** When an admin/owner is an EOA, evmsec
+  reports single-key control because that's what's _enforced on-chain_. But that
+  address may be an MPC/HSM/threshold-signing setup off-chain (Fireblocks and
+  similar) requiring multiple approvals. evmsec can't observe off-chain custody,
+  so `critical` here means "no on-chain multisig/timelock," not "one person can
+  rug this tomorrow."
+- **Multisig threshold is a weak predictor.** Ronin (5-of-9, a majority) was
+  drained for $625M; Harmony (2-of-5, and not even a Gnosis Safe) for ~$100M. A
+  healthy-looking ratio says little about signer independence, key custody, or
+  social-engineering exposure. Treat the Safe check as a nudge, not a verdict.
+- **Governance evmsec doesn't resolve → `warning (not assessed)`, not a finding.**
+  It resolves EIP-1967 proxy admins and `owner()`. Contracts governed by a DAO
+  (Aragon/Governor), AccessControl roles, or a non-standard `admin()`
+  (Compound-style) come back **unresolved** — flagged for manual review, which is
+  fail-closed, not an accusation. Curve, Frax, Balancer, and cUSDC all land here.
+- **`compiler-bugs` is warning-level in practice.** Every high-severity solc bug
+  in the CBOR-metadata era (≥0.4.22) is _conditional_ on compile settings evmsec
+  can't read from bytecode (viaIR/optimizer/ABIEncoderV2). So the `critical`
+  (unconditional-high) path effectively never fires for a real modern contract —
+  the useful output is the warning-level "this version is subject to X; verify."
+- **Bytecode heuristics aren't proofs.** Mint/pause/upgrade detection scans the
+  dispatcher for selectors and reads a few slots. It can miss non-standard
+  patterns and can't reason about custom logic. Every verdict says "confirm
+  against source" because you should.
+- **Role enumeration is best-effort.** `MINTER_ROLE`/`PAUSER_ROLE` holders come
+  from AccessControlEnumerable or `RoleGranted` history; a public RPC that caps
+  `getLogs` ranges can return an incomplete set (the tool says when it does).
+
+None of this is a reason not to run it — a fast, honest, on-chain-property check
+in CI catches real regressions. It _is_ a reason not to treat a clean run as an
+audit.
 
 ## Use in CI (GitHub Action)
 

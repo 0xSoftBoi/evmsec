@@ -94,27 +94,28 @@ export function classifyAuthority(input: AuthorityInput): AuthorityVerdict {
         summary: `Gnosis Safe with threshold ${threshold}-of-${owners} — a 1-of-N multisig is effectively a single key.`,
       };
     }
-    // A threshold below 3, or one that isn't a majority of the owners, is a thin
-    // margin: a 2-key phishing/compromise (Harmony's bridge was 2-of-5) or a
-    // minority of signers can move everything. Flag it for review rather than pass.
-    const belowFloor = threshold < 3;
-    const notMajority = threshold * 2 <= owners;
-    if (belowFloor || notMajority) {
-      const why = belowFloor
-        ? `only ${threshold} key(s) need be compromised to gain full control`
-        : `${threshold} of ${owners} is not a majority of signers`;
+    // Flag only a *strict minority* threshold (2·threshold < owners): fewer than
+    // half the signers can move everything (e.g. 2-of-5, 4-of-10). A threshold at
+    // or above half (2-of-3, 3-of-5, 5-of-10) is not flagged — those are ordinary,
+    // reasonable configs and flagging them is noise.
+    //
+    // Caveat, stated plainly: threshold is a *weak* signal. Ronin's bridge was
+    // 5-of-9 — a majority — and was still drained via key compromise; Harmony's was
+    // a custom 2-of-5 (not a Gnosis Safe, so this path wouldn't even classify it).
+    // Signer independence and key custody matter far more than the ratio.
+    if (2 * threshold < owners) {
       return {
         kind: "safe",
         risk: "elevated",
         fail: false,
-        summary: `Gnosis Safe ${threshold}-of-${owners} — low threshold (${why}). Confirm this matches the value at risk and that signers are independent.`,
+        summary: `Gnosis Safe ${threshold}-of-${owners} — a minority of signers (fewer than half) can act. Confirm this matches the value at risk; note threshold alone is a weak signal (Ronin was 5-of-9 and still fell to key compromise).`,
       };
     }
     return {
       kind: "safe",
       risk: "info",
       fail: false,
-      summary: `Gnosis Safe multisig, ${threshold}-of-${owners}. Confirm the signers are independent and the threshold matches the value at risk.`,
+      summary: `Gnosis Safe multisig, ${threshold}-of-${owners} (threshold is at least half the signers). A reasonable config on its face — but verify signer independence and key custody, which matter more than the ratio (Ronin's 5-of-9 majority was still drained).`,
     };
   }
 
