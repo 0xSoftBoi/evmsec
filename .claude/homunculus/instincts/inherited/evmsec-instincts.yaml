@@ -1,0 +1,573 @@
+# Instincts generated from https://github.com/0xSoftBoi/evmsec
+# Generated: 2026-07-01T09:15:52.281Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: evmsec-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, refactor, fix, test
+
+## Evidence
+
+- 12 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: admin-power — classify what kind of authority controls a contract, refactor: unify the contract checks behind one framework (+ SARIF, sharper Safe logic)
+
+---
+id: evmsec-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Commit Length
+
+## Action
+
+Write moderate-length commit messages (~71 characters)
+
+## Evidence
+
+- Average commit message length: 71 chars
+- Based on 12 commits
+
+---
+id: evmsec-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Naming Files
+
+## Action
+
+Use kebab-case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: kebab-case
+
+---
+id: evmsec-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: evmsec-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: evmsec-test-colocate
+trigger: "when writing tests"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Test Colocate
+
+## Action
+
+Place test file next to the source file (e.g., Button.test.tsx next to Button.tsx)
+
+## Evidence
+
+- Colocated test pattern detected
+- Tests live alongside source files
+
+---
+id: evmsec-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: evmsec-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~18x per month
+- Files: src/*, src/commands/*, src/data/*
+
+---
+id: evmsec-workflow-add-new-contract-check
+trigger: "when doing add new contract check"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Workflow Add New Contract Check
+
+## Action
+
+Follow the add-new-contract-check workflow:
+1. Implement core check logic in src/checks/<check>.ts and/or src/<check>-core.ts
+2. Write unit tests for the check in src/<check>-core.test.ts or src/freeze-core.test.ts
+3. Add a CLI command in src/commands/<check>.ts
+4. Register the check in src/index.ts and/or the audit suite
+5. Update documentation: README.md, CHANGELOG.md, docs/IMPROVEMENTS.md
+6. Optionally, add or update fixtures in src/fixtures/incidents/*.json and/or scripts/capture-fixtures.ts
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: src/checks/<check>.ts, src/<check>-core.ts, src/<check>-core.test.ts
+
+---
+id: evmsec-workflow-update-incident-fixtures-and-replay-tests
+trigger: "when doing update incident fixtures and replay tests"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Workflow Update Incident Fixtures And Replay Tests
+
+## Action
+
+Follow the update-incident-fixtures-and-replay-tests workflow:
+1. Use scripts/capture-fixtures.ts to record on-chain reads and responses
+2. Add or update JSON fixtures in src/fixtures/incidents/*.json
+3. Update or add tests in src/incident-fixtures.test.ts to replay and assert expected verdicts
+4. Update README.md and docs/IMPROVEMENTS.md to reflect new or changed fixtures
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: scripts/capture-fixtures.ts, src/fixtures/incidents/*.json, src/incident-fixtures.test.ts
+
+---
+id: evmsec-workflow-refactor-deduplicate-check-logic
+trigger: "when doing refactor deduplicate check logic"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Workflow Refactor Deduplicate Check Logic
+
+## Action
+
+Follow the refactor-deduplicate-check-logic workflow:
+1. Identify duplicated logic across check files (e.g., selector scanning, verdict mapping, role resolution)
+2. Extract shared logic into utility files (e.g., src/lib.ts, src/check.ts, src/checks/onchain.ts)
+3. Update all affected check files to use the shared utilities
+4. Ensure all tests pass and fixtures remain valid
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/checks/*.ts, src/lib.ts, src/check.ts
+
+---
+id: evmsec-workflow-documentation-and-roadmap-update
+trigger: "when doing documentation and roadmap update"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/0xSoftBoi/evmsec
+---
+
+# Evmsec Workflow Documentation And Roadmap Update
+
+## Action
+
+Follow the documentation-and-roadmap-update workflow:
+1. Edit README.md to document new features, changes, limitations, or corrections
+2. Update CHANGELOG.md with a summary of changes
+3. Update docs/IMPROVEMENTS.md to move features from planned to shipped or to clarify plans
+4. Edit ROADMAP.md if future plans or priorities change
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: README.md, CHANGELOG.md, docs/IMPROVEMENTS.md
+
+---
+id: evmsec-instinct-file-naming
+trigger: "When creating a new file in the repository"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct File Naming
+
+## Action
+
+Name the file using kebab-case (e.g., admin-power.ts)
+
+## Evidence
+
+- Pattern in namingConventions.files
+- Files like src/checks/admin-power.ts
+
+---
+id: evmsec-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Function Naming
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in namingConventions.functions
+- Consistent function naming in src/
+
+---
+id: evmsec-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Class Naming
+
+## Action
+
+Use PascalCase for class names
+
+## Evidence
+
+- Pattern in namingConventions.classes
+- Classes in src/
+
+---
+id: evmsec-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in namingConventions.constants
+- Constants in src/
+
+---
+id: evmsec-instinct-import-style
+trigger: "When importing modules"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle
+- Imports in src/
+
+---
+id: evmsec-instinct-export-style
+trigger: "When exporting functions or classes"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle
+- Exports in src/
+
+---
+id: evmsec-instinct-test-location
+trigger: "When adding tests for a module"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Test Location
+
+## Action
+
+Colocate test files alongside the code they test, using the pattern <module>.test.ts
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation
+- Files like src/authority-core.test.ts
+
+---
+id: evmsec-instinct-test-type
+trigger: "When writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Test Type
+
+## Action
+
+Write unit tests using the *.test.ts naming convention
+
+## Evidence
+
+- Pattern in testing.filePattern
+- Files like src/<check>-core.test.ts
+
+---
+id: evmsec-instinct-test-coverage
+trigger: "When configuring or running tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Test Coverage
+
+## Action
+
+Ensure code coverage is measured and reported
+
+## Evidence
+
+- Pattern in testing.coverageConfig
+- Presence of coverage config files
+
+---
+id: evmsec-instinct-commit-format
+trigger: "When making a git commit"
+confidence: 0.95
+domain: git
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Commit Format
+
+## Action
+
+Use Conventional Commits format with prefixes: feat, fix, refactor, test
+
+## Evidence
+
+- Pattern in commits.prefixes
+- Examples like 'feat: admin-power — classify what kind of authority controls a contract'
+
+---
+id: evmsec-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 70 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength
+- Observed commit examples
+
+---
+id: evmsec-instinct-add-contract-check
+trigger: "When a new security check needs to be added to evmsec"
+confidence: 0.98
+domain: workflow
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Add Contract Check
+
+## Action
+
+Implement core logic, write unit tests, add CLI command, register in index, update documentation, and optionally add fixtures as per workflow
+
+## Evidence
+
+- Workflow: add-new-contract-check
+- Files: src/checks/<check>.ts, src/<check>-core.ts, src/commands/<check>.ts, README.md, etc.
+
+---
+id: evmsec-instinct-update-incident-fixtures
+trigger: "When a new check is added or check logic changes and needs validation against real contracts"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Update Incident Fixtures
+
+## Action
+
+Capture new mainnet verdicts as fixtures, update JSONs, replay tests, and update docs
+
+## Evidence
+
+- Workflow: update-incident-fixtures-and-replay-tests
+- Files: scripts/capture-fixtures.ts, src/fixtures/incidents/*.json, src/incident-fixtures.test.ts
+
+---
+id: evmsec-instinct-refactor-check-logic
+trigger: "When duplicated logic is found across check implementations"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Refactor Check Logic
+
+## Action
+
+Extract shared logic into utility files and update all affected checks to use them
+
+## Evidence
+
+- Workflow: refactor-deduplicate-check-logic
+- Files: src/lib.ts, src/check.ts, src/checks/onchain.ts
+
+---
+id: evmsec-instinct-update-documentation
+trigger: "When a new feature is added, a bug is fixed, or research changes the understanding of a feature"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: 0xSoftBoi/evmsec
+---
+
+# Evmsec Instinct Update Documentation
+
+## Action
+
+Update README.md, CHANGELOG.md, docs/IMPROVEMENTS.md, and ROADMAP.md to reflect changes
+
+## Evidence
+
+- Workflow: documentation-and-roadmap-update
+- Files: README.md, CHANGELOG.md, docs/IMPROVEMENTS.md, ROADMAP.md
+
