@@ -8,6 +8,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`serve` — the Watchtower, an embedded web application.** `evmsec serve` boots a
+  live dashboard + REST/SSE API + background monitor over the same solvency engine:
+  a status board with per-route backing, USD value, and trend sparklines (live over
+  SSE); route detail with history; an alerts feed driven by the same
+  `computeTransitions` core as `--watch` (one alert per breach/recovery transition,
+  webhook-compatible schema); **watches** (add custom routes to the sweep via the UI
+  or `POST /api/watches`, validated and checksummed, joining the next sweep
+  immediately — removing one also drops its history so no ghost rows survive); and
+  **my exposure** (`/api/exposure?address=…` — wrapped-token balances across every
+  monitored route × USD × current verdict; a connected wallet only ever supplies an
+  address). State persists as JSONL under `--data-dir` — restarts resume history and
+  never re-alert a breach that was already known. Binds loopback by default; when
+  exposed, writes require a bearer token (constant-time compared), reads stay open.
+  Zero new dependencies (node:http); storage, monitor lifecycle, and the HTTP API are
+  unit-tested with injected fakes (+18 tests). The full production design — hosted
+  architecture, Postgres schema, API spec, auth, deployment, testing, roadmap — is in
+  [`docs/watchtower.md`](docs/watchtower.md).
+
 - **Source verification now consults Etherscan as well as Sourcify.** The
   `verification-status` check falls back to Etherscan's multichain v2 API
   (`getsourcecode`) when Sourcify has no match and an `ETHERSCAN_API_KEY` is set — so a
