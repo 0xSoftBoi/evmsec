@@ -29,9 +29,23 @@ more on-chain security checks under one tool.
 ## Install
 
 ```bash
-npm install
-cp .env.example .env   # optional: your own RPCs / bridge registry
+# once published — no clone, no build:
+npx evmsec audit 0xContract --chain ethereum
+npm i -g evmsec            # or install the `evmsec` / `evmsec-mcp` bins globally
+
+# Docker (no Node needed):
+docker run --rm -e ETHEREUM_RPC_URL=https://your-rpc \
+  ghcr.io/0xsoftboi/evmsec audit 0xContract --chain ethereum
+
+# from source (for development):
+git clone https://github.com/0xSoftBoi/evmsec && cd evmsec && npm install
+cp .env.example .env       # optional: your own RPCs / bridge registry
 ```
+
+Point an `<CHAIN>_RPC_URL` env var at a reliable endpoint — the public fallbacks
+are rate-limited. Releases are cut by pushing a `v*` tag: the
+[`release` workflow](.github/workflows/release.yml) publishes to npm (with
+provenance) and pushes the image to GHCR.
 
 ## Usage
 
