@@ -1,7 +1,8 @@
 name: bridge-status
 
-# Keep STATUS.md — the live "is every bridge in the registry backed?" page — fresh.
-# Runs on a schedule and on demand; commits STATUS.md back only when it changed.
+# Keep the live "is every bridge in the registry backed?" artifacts fresh:
+# STATUS.md (human page), STATUS.json (machine feed), badge.json (shields.io badge).
+# Runs on a schedule and on demand; commits them back only when they changed.
 #
 # Optional secrets for stable numbers (public RPCs are rate-limited):
 #   ETHEREUM_RPC_URL, POLYGON_RPC_URL, ARBITRUM_RPC_URL, OPTIMISM_RPC_URL, BASE_RPC_URL
@@ -35,11 +36,11 @@ jobs:
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
           OPTIMISM_RPC_URL: ${{ secrets.OPTIMISM_RPC_URL }}
           BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
-      - name: Commit STATUS.md if it changed
+      - name: Commit status artifacts if they changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add STATUS.md
+          git add STATUS.md STATUS.json badge.json
           if git diff --cached --quiet; then
             echo "no change"
           else
