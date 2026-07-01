@@ -1,15 +1,7 @@
 import "dotenv/config";
 
 export type ChainKey =
-  | "ethereum"
-  | "base"
-  | "arbitrum"
-  | "optimism"
-  | "polygon"
-  | "linea"
-  | "scroll"
-  | "base-sepolia"
-  | "sepolia";
+  "ethereum" | "base" | "arbitrum" | "optimism" | "polygon" | "linea" | "scroll" | "base-sepolia" | "sepolia";
 
 export interface ChainConfig {
   key: ChainKey;

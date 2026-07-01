@@ -409,6 +409,7 @@ async function bisect(route: Route, since: string, minRatio: number, json: boole
     throw new Error(
       `historical state read failed (${e instanceof Error ? e.message : e}). ` +
         `--since needs an archive RPC — set ${envs} to an archive node.`,
+      { cause: e },
     );
   }
 

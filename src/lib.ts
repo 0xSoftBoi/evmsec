@@ -124,17 +124,14 @@ export async function withRetry<T>(
 ): Promise<T> {
   const retries = opts.retries ?? RPC_RETRIES;
   const base = opts.baseDelayMs ?? 250;
-  let lastErr: unknown;
   for (let attempt = 0; ; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      lastErr = err;
       if (attempt >= retries || !isTransientRpcError(err)) throw err;
       await sleep(base * 2 ** attempt);
     }
   }
-  throw lastErr; // unreachable; satisfies the type checker
 }
 
 /**

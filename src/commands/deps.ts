@@ -142,7 +142,9 @@ function readManifest(file: string): unknown {
   try {
     return JSON.parse(text);
   } catch (err) {
-    throw new Error(`manifest "${file}" is not valid JSON: ${err instanceof Error ? err.message : err}`);
+    throw new Error(`manifest "${file}" is not valid JSON: ${err instanceof Error ? err.message : err}`, {
+      cause: err,
+    });
   }
 }
 

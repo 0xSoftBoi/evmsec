@@ -183,7 +183,7 @@ export function classifyMintAuthority(
 ): MintAuthorityVerdict {
   const isAccessControl = surface.authModel === "access-control" || surface.authModel === "ownable+access-control";
   const capNote = surface.capped ? " Inflation is bounded by a supply cap — confirm the cap value." : "";
-  let risk: MintRisk = "info";
+  let risk: MintRisk;
   let summary: string;
   let fail = false;
 

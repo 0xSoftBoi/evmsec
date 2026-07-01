@@ -81,7 +81,7 @@ export interface FreezeVerdict {
  */
 export function classifyFreezeAuthority(surface: FreezeSurface, authority: RoleHolder | null): FreezeVerdict {
   const verb = surface.canSeize ? "freeze or seize" : "freeze";
-  let risk: FreezeRisk = "info";
+  let risk: FreezeRisk;
   let summary: string;
   let fail = false;
 
