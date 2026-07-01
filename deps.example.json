@@ -1,0 +1,8 @@
+{
+  "$comment": "evmsec deps manifest — list the external on-chain contracts your protocol trusts. Run: evmsec deps deps.json (or set EVMSEC_DEPS). Verify every address against the project's own source before trusting it.",
+  "dependencies": [
+    { "label": "USDC", "chain": "ethereum", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
+    { "label": "WBTC", "chain": "ethereum", "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599" },
+    { "label": "DAI", "chain": "ethereum", "address": "0x6B175474E89094C44Da98b954EedeAC495271d0F" }
+  ]
+}

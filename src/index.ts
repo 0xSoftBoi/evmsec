@@ -12,9 +12,11 @@ import { compilerBugs } from "./commands/compiler-bugs.js";
 import { verificationStatus } from "./commands/verification-status.js";
 import { freezeAuthority } from "./commands/freeze-authority.js";
 import { audit } from "./commands/audit.js";
+import { deps } from "./commands/deps.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   audit,
+  deps,
   solvency,
   upgradeability,
   "admin-power": adminPower,
@@ -36,6 +38,8 @@ usage: evmsec <command> [args]
 commands:
   audit <address>               run every applicable check on a contract and
                                   print one report card (non-zero if any fails)
+  deps [manifest]               audit your on-chain dependencies (the external
+                                  contracts you trust) from a deps.json manifest
   solvency <route-id|--all>     is a lock-and-mint bridge fully backed?
                                   (locked collateral ≥ wrapped supply minted)
   upgradeability <address>      EIP-1967 proxy check: upgradeable? who controls it?
@@ -79,6 +83,7 @@ exit code is non-zero when a bridge is undercollateralized — drop it in a cron
 
 examples:
   evmsec audit 0xContract --chain ethereum         # one report card, every check
+  evmsec deps deps.json --fail-on warning          # audit your on-chain dependencies
   evmsec solvency --all
   evmsec solvency my-route --since 2024-01-01      # when did backing break?
   evmsec solvency --lock-chain ethereum --escrow 0xEsc --token 0xUSDC \\

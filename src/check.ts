@@ -178,31 +178,45 @@ export function renderJson(
   );
 }
 
-/** SARIF 2.1.0 — drops findings into the GitHub code-scanning / Security tab. */
-export function renderSarif(ctx: { chain: ChainConfig; target: string }, reports: CheckReport[]): string {
-  const sarifLevel: Record<Severity, string> = { critical: "error", warning: "warning", ok: "note", skip: "none" };
-  const rules = reports.map((r) => ({
-    id: r.id,
-    name: r.title.replace(/\s+/g, ""),
-    shortDescription: { text: r.title },
-    helpUri: "https://github.com/0xSoftBoi/evmsec",
-  }));
-  const results = reports
-    .filter((r) => r.severity !== "skip" && r.severity !== "ok")
-    .map((r) => ({
-      ruleId: r.id,
-      level: sarifLevel[r.severity],
-      message: { text: `${r.summary}${r.notes.length ? "\n- " + r.notes.join("\n- ") : ""}` },
-      properties: { target: ctx.target, chain: ctx.chain.key, evidence: r.evidence },
-      locations: [
-        {
-          physicalLocation: {
-            artifactLocation: { uri: `${ctx.chain.key}/${ctx.target}` },
-            region: { startLine: 1 },
-          },
-        },
-      ],
-    }));
+const SARIF_LEVEL: Record<Severity, string> = { critical: "error", warning: "warning", ok: "note", skip: "none" };
+
+export interface SarifTarget {
+  chain: ChainConfig;
+  target: string;
+  reports: CheckReport[];
+}
+
+/**
+ * SARIF 2.1.0 across one or many targets — drops findings into the GitHub
+ * code-scanning / Security tab. Rules are the union of every check id seen; each
+ * non-ok finding becomes a result located at `<chain>/<address>`.
+ */
+export function renderSarifMulti(targets: SarifTarget[]): string {
+  const ruleById = new Map<string, { id: string; name: string; shortDescription: { text: string }; helpUri: string }>();
+  const results: unknown[] = [];
+
+  for (const { chain, target, reports } of targets) {
+    for (const r of reports) {
+      if (!ruleById.has(r.id)) {
+        ruleById.set(r.id, {
+          id: r.id,
+          name: r.title.replace(/\s+/g, ""),
+          shortDescription: { text: r.title },
+          helpUri: "https://github.com/0xSoftBoi/evmsec",
+        });
+      }
+      if (r.severity === "skip" || r.severity === "ok") continue;
+      results.push({
+        ruleId: r.id,
+        level: SARIF_LEVEL[r.severity],
+        message: { text: `${r.summary}${r.notes.length ? "\n- " + r.notes.join("\n- ") : ""}` },
+        properties: { target, chain: chain.key, evidence: r.evidence },
+        locations: [
+          { physicalLocation: { artifactLocation: { uri: `${chain.key}/${target}` }, region: { startLine: 1 } } },
+        ],
+      });
+    }
+  }
 
   return JSON.stringify(
     {
@@ -210,7 +224,13 @@ export function renderSarif(ctx: { chain: ChainConfig; target: string }, reports
       version: "2.1.0",
       runs: [
         {
-          tool: { driver: { name: "evmsec", informationUri: "https://github.com/0xSoftBoi/evmsec", rules } },
+          tool: {
+            driver: {
+              name: "evmsec",
+              informationUri: "https://github.com/0xSoftBoi/evmsec",
+              rules: [...ruleById.values()],
+            },
+          },
           results,
         },
       ],
@@ -218,4 +238,9 @@ export function renderSarif(ctx: { chain: ChainConfig; target: string }, reports
     null,
     2,
   );
+}
+
+/** SARIF for a single target — thin wrapper over `renderSarifMulti`. */
+export function renderSarif(ctx: { chain: ChainConfig; target: string }, reports: CheckReport[]): string {
+  return renderSarifMulti([{ chain: ctx.chain, target: ctx.target, reports }]);
 }

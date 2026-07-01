@@ -1,9 +1,10 @@
-import { chain } from "../config.js";
+import { ChainConfig, chain } from "../config.js";
 import {
   Check,
   CheckContext,
   CheckOptions,
   CheckReport,
+  Provider,
   Severity,
   renderHuman,
   renderJson,
@@ -15,32 +16,27 @@ import { getProvider, mapWithConcurrency, requireAddress, withRetry } from "../l
 
 const SEVERITIES: Severity[] = ["critical", "warning", "ok", "skip"];
 
+export interface TargetAssessment {
+  ctx: CheckContext;
+  reports: CheckReport[];
+}
+
 /**
- * The single entry point behind every contract-audit command. Parses args, builds
- * one shared context (bytecode fetched once), runs the given checks, and renders
- * the result as human text, JSON, or SARIF. A standalone command passes one
- * check; `audit` passes the whole registry.
+ * Build the shared context for one target (bytecode fetched **once**) and run the
+ * applicable checks against it, isolating a per-check failure as a `skip` report.
+ * The reusable core behind `runChecks` (CLI), `deps` (many targets), and the MCP
+ * server. Returns an empty `reports` array when nothing applies (an EOA).
  */
-export async function runChecks(checks: Check[], args: string[], usage: string): Promise<void> {
-  const p = parse(args, usage);
-  const c = chain(p.chainKey);
-  const provider = getProvider(c);
-  const target = requireAddress(p.address);
-
+export async function assessTarget(
+  checks: Check[],
+  provider: Provider,
+  chainCfg: ChainConfig,
+  target: string,
+  opts: CheckOptions,
+): Promise<TargetAssessment> {
   const code = await withRetry(() => provider.getCode(target), { label: "getCode" });
-  const opts: CheckOptions = { minDelaySec: p.minDelaySec, sourcify: p.sourcify, failOn: p.failOn };
-  const ctx: CheckContext = { provider, chain: c, target, code, opts };
-
+  const ctx: CheckContext = { provider, chain: chainCfg, target, code, opts };
   const applicable = checks.filter((ch) => ch.applies(ctx));
-  if (applicable.length === 0) {
-    // Only happens when the target has no code — nothing here applies to an EOA.
-    if (p.json)
-      console.log(JSON.stringify({ tool: "evmsec", target, chain: c.key, error: "no code at address" }, null, 2));
-    else console.log(`\n${target} on ${c.name} has no code (EOA or self-destructed) — nothing to audit.\n`);
-    process.exitCode = 1;
-    return;
-  }
-
   const concurrency = Math.max(1, Number(process.env.EVMSEC_CONCURRENCY ?? 5));
   const reports = await mapWithConcurrency(applicable, concurrency, async (ch): Promise<CheckReport> => {
     try {
@@ -56,6 +52,32 @@ export async function runChecks(checks: Check[], args: string[], usage: string):
       };
     }
   });
+  return { ctx, reports };
+}
+
+/**
+ * The single entry point behind every contract-audit command. Parses args, builds
+ * one shared context (bytecode fetched once), runs the given checks, and renders
+ * the result as human text, JSON, or SARIF. A standalone command passes one
+ * check; `audit` passes the whole registry.
+ */
+export async function runChecks(checks: Check[], args: string[], usage: string): Promise<void> {
+  const p = parse(args, usage);
+  const c = chain(p.chainKey);
+  const provider = getProvider(c);
+  const target = requireAddress(p.address);
+  const opts: CheckOptions = { minDelaySec: p.minDelaySec, sourcify: p.sourcify, failOn: p.failOn };
+
+  const { ctx, reports } = await assessTarget(checks, provider, c, target, opts);
+
+  if (reports.length === 0) {
+    // Only happens when the target has no code — nothing here applies to an EOA.
+    if (p.json)
+      console.log(JSON.stringify({ tool: "evmsec", target, chain: c.key, error: "no code at address" }, null, 2));
+    else console.log(`\n${target} on ${c.name} has no code (EOA or self-destructed) — nothing to audit.\n`);
+    process.exitCode = 1;
+    return;
+  }
 
   if (p.sarif) console.log(renderSarif(ctx, reports));
   else if (p.json) console.log(renderJson(ctx, reports, p.failOn));

@@ -133,6 +133,71 @@ flag it as an unrecognized controller, not via this path). Signer independence a
 key custody matter far more than the ratio; the heuristic is a nudge to look, not
 a verdict.
 
+### `deps` — audit your on-chain dependencies
+
+Your protocol has an **on-chain supply chain**: the USDC you hold, the Chainlink
+feed you price off, the bridge you route through. You inherit their upgrade admin,
+their freeze authority, their oracle staleness — and any of those can change under
+you after you've integrated. `deps` audits every external contract you trust, from
+one manifest, and rolls the results into a single CI verdict.
+
+```bash
+npm run evmsec -- deps deps.json [--fail-on warning] [--json|--sarif]
+```
+
+The manifest (`deps.json`, or `EVMSEC_DEPS`, or a path argument) lists the
+contracts you depend on — see [`deps.example.json`](deps.example.json):
+
+```json
+{
+  "dependencies": [
+    { "label": "USDC", "chain": "ethereum", "address": "0xA0b8…eB48" },
+    { "label": "Chainlink ETH/USD", "chain": "ethereum", "address": "0x5f4e…8419" }
+  ]
+}
+```
+
+It runs the full `audit` family against each entry and prints a per-dependency
+report card + an overall roll-up. **Exit code is non-zero when any dependency has
+a blocking finding** (`--fail-on` sets the bar), so a dependency quietly becoming
+single-key-controlled fails your build:
+
+```bash
+evmsec deps deps.json --fail-on warning || alert "an on-chain dependency regressed"
+```
+
+This is the niche nobody occupies — a supply-chain / `npm audit` for the deployed
+contracts your protocol trusts, not just your own code. `--json` / `--sarif` emit
+the aggregate for CI and the GitHub Security tab.
+
+### Use it from an AI agent — the MCP server
+
+evmsec ships an [MCP](https://modelcontextprotocol.io) server, so an agent can ask
+_"is this contract safe to interact with?"_ before signing a transaction, or fold
+an on-chain-state audit into a workflow. It speaks JSON-RPC over stdio and exposes:
+
+- **`audit_contract`** `{ address, chain? }` — runs the full audit family, returns a
+  structured verdict (overall severity + per-check findings + evidence).
+- **`list_supported_chains`** — the chains and their ids.
+
+Wire it into a client's `mcpServers` config as a stdio server:
+
+```json
+{
+  "mcpServers": {
+    "evmsec": {
+      "command": "npx",
+      "args": ["-y", "evmsec-mcp"],
+      "env": { "ETHEREUM_RPC_URL": "https://your-rpc" }
+    }
+  }
+}
+```
+
+Findings come back as structured JSON with an explicit disclaimer (heuristic, and
+an on-chain EOA may be MPC-backed off-chain) so the agent doesn't over-trust them.
+`stdout` is the protocol channel; all logging goes to `stderr`.
+
 ### `solvency` — is the bridge backed?
 
 ```bash
@@ -665,8 +730,10 @@ src/
   freeze-core.ts             pure blacklist/freeze capability + authority classification
   *-core.test.ts             unit tests for the pure cores (no network)
   check.ts                   the check framework: Finding/Report types + human/JSON/SARIF renderers
+  deps-core.ts               pure dependency-manifest validation (shape / chains / addresses)
+  mcp.ts                     MCP server entrypoint (evmsec-mcp) — audit_contract over stdio
   checks/                    one assessor per contract-audit check (over the pure cores)
-    run.ts                   shared runner: parse → fetch bytecode once → run checks → render
+    run.ts                   shared runner + assessTarget (fetch bytecode once → run checks)
     registry.ts              the contract-audit family (what `audit` runs)
     onchain.ts               shared on-chain reads (proxy/authority/Safe/timelock probes)
     {upgradeability,authority,compiler,verification,mint,pause,freeze}.ts
@@ -676,6 +743,7 @@ src/
   bridges.ts                 route registry loader
   commands/                  thin CLI wrappers (each runs one check, or the whole family)
     audit.ts                 meta-command: run every applicable check → report card
+    deps.ts                  audit your on-chain dependencies from a deps.json manifest
     solvency.ts              flagship: lock-vs-mint backing check
     upgradeability.ts        EIP-1967 / legacy proxy admin risk
     admin-power.ts           what kind of authority controls it (EOA/Safe/timelock)?
