@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Live bridge-status page + more verified routes.** `STATUS.md` is an
+  auto-generated "is every bridge in the registry backed right now?" page —
+  `npm run gen:status` (`scripts/gen-status.mjs`) runs `solvency --all` and
+  formats it as a Markdown table (locked / minted / backing per route), and the
+  scheduled [`bridge-status` workflow](.github/workflows/bridge-status.yml)
+  refreshes it every 6 hours, committing back only when the numbers change. It's
+  the open-source bridge-watch the ecosystem lacks, in ~40 lines. The registry
+  grew to **9 live-verified routes** across Polygon PoS, Arbitrum, OP Mainnet, and
+  Base (added OP-WBTC, Base-DAI, Base-cbETH — each verified `BACKED` first;
+  OP-USDT's unexplained 13% excess was left out). Also: an empty `<CHAIN>_RPC_URL`
+  (an unset CI secret expands to `""`) now falls back to the public endpoint
+  instead of becoming a broken empty URL.
+
 - **`bridges.json` seeded with real, live-verified routes** — so the flagship
   `solvency --all` actually does its headline job out of the box instead of
   shipping illustrative placeholders. Six routes across two bridges and two

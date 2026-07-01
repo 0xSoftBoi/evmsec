@@ -45,7 +45,8 @@
     "gen:solc-bugs": "node scripts/gen-solc-bugs.mjs",
     "capture:fixtures": "tsx scripts/capture-fixtures.ts",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run validate:registry && npm test",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "gen:status": "node scripts/gen-status.mjs"
   },
   "keywords": [
     "ethereum",

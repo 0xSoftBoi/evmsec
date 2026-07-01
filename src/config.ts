@@ -13,7 +13,10 @@ export interface ChainConfig {
 }
 
 function rpc(envKey: string, fallback: string): string {
-  return process.env[envKey] ?? fallback;
+  // Treat an empty value (e.g. an unset CI secret, which expands to "") as absent,
+  // so it falls back to the public endpoint rather than becoming a broken "" URL.
+  const v = process.env[envKey];
+  return v && v.trim() ? v : fallback;
 }
 
 export const CHAINS: Record<ChainKey, ChainConfig> = {
