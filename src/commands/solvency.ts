@@ -22,7 +22,7 @@ import { AGGREGATOR_ABI, fmtUsd, priceRouteFor, priceFromHops, usdValue, type Ho
 /** How many routes `--all` checks at once (override via EVMSEC_CONCURRENCY). */
 const ROUTE_CONCURRENCY = Number(process.env.EVMSEC_CONCURRENCY) || 5;
 
-interface SolvencyResult {
+export interface SolvencyResult {
   id: string;
   bridge: string;
   asset: string;
@@ -94,7 +94,7 @@ export async function solvency(args: string[]): Promise<void> {
  * route (bad RPC, renamed contract) can't abort the whole scan or mask the
  * others — it surfaces as an ERROR result instead.
  */
-function checkAll(routes: Route[]): Promise<SolvencyResult[]> {
+export function checkAll(routes: Route[]): Promise<SolvencyResult[]> {
   return mapWithConcurrency(routes, ROUTE_CONCURRENCY, (route) => checkRouteSafe(route));
 }
 

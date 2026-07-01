@@ -280,6 +280,33 @@ curl -s https://raw.githubusercontent.com/0xSoftBoi/evmsec/master/STATUS.json \
   | jq '.overall, (.routes[] | select(.verdict != "BACKED"))'
 ```
 
+#### `serve` — the Watchtower: a live dashboard + API in one command
+
+```bash
+evmsec serve                       # http://127.0.0.1:8787
+```
+
+An embedded web application over the same engine: a **live status board** (verdict,
+backing %, USD value, trend sparkline per route — updating over SSE as sweeps land),
+**route detail** with history, an **alerts** feed (one alert per breach/recovery
+_transition_, webhook-compatible with `--watch`), **watches** (add your own routes to
+the sweep from the browser or `POST /api/watches`), and **my exposure** — connect a
+wallet (address only; nothing is ever signed) or paste an address to see your
+wrapped-token holdings across every monitored route, valued in USD, next to each
+route's current verdict.
+
+It's production-shaped without infrastructure: state persists under `--data-dir`
+(restarts resume history and don't re-alert known breaches), the server binds
+**loopback by default**, and when exposed (`--host 0.0.0.0`) writes require
+`--token`/`EVMSEC_TOKEN` (reads stay open). REST + SSE API under `/api` —
+`/status`, `/routes/:id/history`, `/alerts`, `/watches`, `/exposure`, `/stream`,
+`/health`. No new dependencies; storage/monitor/server are unit-tested with the
+repo's usual injected-fakes style.
+
+📐 The full production design — hosted multi-tenant architecture, Postgres schema,
+API spec, SIWE auth, deployment/CI/monitoring, roadmap — lives in
+[`docs/watchtower.md`](docs/watchtower.md).
+
 **Multi-asset / multi-escrow routes.** A route's `lock` may be an **array of
 legs** (each `{ chain, escrow, token }`). The legs are summed — normalized to 18
 decimals — against the minted supply, so a bridge that spreads collateral across

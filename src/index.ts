@@ -13,6 +13,7 @@ import { verificationStatus } from "./commands/verification-status.js";
 import { freezeAuthority } from "./commands/freeze-authority.js";
 import { audit } from "./commands/audit.js";
 import { deps } from "./commands/deps.js";
+import { serve } from "./commands/serve.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   audit,
@@ -29,6 +30,7 @@ const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   "pause-guardian": pauseGuardian,
   "freeze-authority": freezeAuthority,
   "message-proof": messageProof,
+  serve,
 };
 
 const HELP = `evmsec — a security CLI for EVM chains
@@ -42,6 +44,8 @@ commands:
                                   contracts you trust) from a deps.json manifest
   solvency <route-id|--all>     is a lock-and-mint bridge fully backed?
                                   (locked collateral ≥ wrapped supply minted)
+  serve                         the Watchtower: live dashboard + REST/SSE API +
+                                  monitor over the route registry (see docs/)
   upgradeability <address>      EIP-1967 proxy check: upgradeable? who controls it?
   admin-power <address>         who controls it — EOA / Safe (m-of-n) / timelock?
                                   (classifies the proxy admin or owner; delay-aware)
@@ -81,8 +85,17 @@ global:
 
 exit code is non-zero when a bridge is undercollateralized — drop it in a cron.
 
+serve flags:
+  --port <n> --host <ip>        default 8787 on 127.0.0.1 (loopback)
+  --interval <sec>              sweep cadence (default 60)
+  --data-dir <path>             persistence dir (default .evmsec-serve)
+  --token <secret>              bearer token for writes (or EVMSEC_TOKEN);
+                                  required for writes when exposed off-loopback
+  --webhook <url>               POST breach/recovery alerts (same schema as --watch)
+
 examples:
   evmsec audit 0xContract --chain ethereum         # one report card, every check
+  evmsec serve --port 8787                         # live dashboard at http://127.0.0.1:8787
   evmsec deps deps.json --fail-on warning          # audit your on-chain dependencies
   evmsec solvency --all
   evmsec solvency my-route --since 2024-01-01      # when did backing break?
