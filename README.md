@@ -303,6 +303,13 @@ It's production-shaped without infrastructure: state persists under `--data-dir`
 `/health`. No new dependencies; storage/monitor/server are unit-tested with the
 repo's usual injected-fakes style.
 
+**One-click hosting on Vercel**: the repo ships a serverless adapter (`api/` +
+`vercel.json`) — import it at [vercel.com/new](https://vercel.com/new) and the
+same dashboard deploys read-only: `/api/status` computes the sweep on demand and
+the CDN caches it (stale-while-revalidate), the UI falls back from SSE to
+polling, exposure works fully, and watches/alerts point you at the embedded
+build (they need persistent state a request cycle doesn't have).
+
 📐 The full production design — hosted multi-tenant architecture, Postgres schema,
 API spec, SIWE auth, deployment/CI/monitoring, roadmap — lives in
 [`docs/watchtower.md`](docs/watchtower.md).

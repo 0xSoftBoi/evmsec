@@ -1,0 +1,5 @@
+.evmsec-serve/
+coverage/
+.github/
+docs/
+STATUS.history.jsonl

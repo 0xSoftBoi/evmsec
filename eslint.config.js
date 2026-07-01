@@ -11,9 +11,10 @@ export default tseslint.config(
   },
   js.configs.recommended,
   {
-    // Plain Node scripts and this config file: declare the Node globals they use
-    // (TypeScript resolves these via @types/node, but raw JS needs them spelled out).
-    files: ["scripts/**/*.{js,mjs}", "*.{js,mjs}"],
+    // Plain Node scripts, the Vercel functions, and this config file: declare the
+    // Node globals they use (TypeScript resolves these via @types/node, but raw JS
+    // needs them spelled out).
+    files: ["scripts/**/*.{js,mjs}", "api/**/*.mjs", "*.{js,mjs}"],
     languageOptions: {
       sourceType: "module",
       globals: { process: "readonly", console: "readonly", fetch: "readonly" },
@@ -27,10 +28,7 @@ export default tseslint.config(
       // keep it a warning so it surfaces in review without failing CI on intent.
       "@typescript-eslint/no-explicit-any": "warn",
       // Allow intentionally-unused args/vars when prefixed with `_`.
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
-      ],
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "no-console": "off", // this is a CLI — stdout/stderr are the product
       eqeqeq: ["error", "smart"],
     },
