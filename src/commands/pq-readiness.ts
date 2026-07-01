@@ -31,6 +31,7 @@ export async function pqReadiness(args: string[]): Promise<void> {
   } catch (err) {
     throw new Error(
       `failed to fetch bytecode for ${target} on ${c.name}: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
     );
   }
   const isEoa = code === "0x";

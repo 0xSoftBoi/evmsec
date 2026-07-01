@@ -102,7 +102,7 @@ export function classifyPauseGuardian(
 ): PauseGuardianVerdict {
   const isAccessControl = surface.authModel === "access-control" || surface.authModel === "ownable+access-control";
   const pausedPrefix = paused === true ? "⚠ token is CURRENTLY PAUSED — transfers are frozen. " : "";
-  let risk: PauseRisk = "info";
+  let risk: PauseRisk;
   let summary: string;
   let fail = false;
 
