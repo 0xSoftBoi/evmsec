@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 /**
- * Generate STATUS.md — a live "is every bridge in the registry backed right now?"
- * page — by running the built CLI's `solvency --all --json` and formatting the
- * result as a Markdown table. Run on a schedule by .github/workflows/bridge-status.yml.
+ * Generate the live "is every bridge in the registry backed right now?" status
+ * artifacts by running the built CLI's `solvency --all --json`:
+ *
+ *   - STATUS.md   — human-readable Markdown table
+ *   - STATUS.json — machine-readable feed (consume it from anywhere)
+ *   - badge.json  — shields.io endpoint (renders a live "bridges: N/N backed" badge)
+ *
+ * Run on a schedule by .github/workflows/bridge-status.yml.
  *
  *   npm run build && node scripts/gen-status.mjs
  *
@@ -37,7 +42,8 @@ const rows = routes
   })
   .join("\n");
 
-const now = new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC";
+const generatedAt = new Date().toISOString();
+const now = generatedAt.replace("T", " ").slice(0, 16) + " UTC";
 
 const md = `# Bridge backing status
 
@@ -59,4 +65,37 @@ ${rows}
 `;
 
 writeFileSync("STATUS.md", md);
-console.error(`wrote STATUS.md — ${backed}/${routes.length} backed${breached ? `, ${breached} breached` : ""}`);
+
+// Machine-readable feed — same data the table is built from, plus a rollup.
+const feed = {
+  generatedAt,
+  overall: breached ? "undercollateralized" : errored ? "degraded" : "backed",
+  backed,
+  breached,
+  errored,
+  total: routes.length,
+  routes: routes.map((r) => ({
+    id: r.id,
+    bridge: r.bridge,
+    asset: r.asset,
+    lockChain: r.lockChain,
+    mintChain: r.mintChain,
+    locked: r.locked,
+    minted: r.minted,
+    ratioPct: r.ratioPct,
+    verdict: r.verdict,
+  })),
+};
+writeFileSync("STATUS.json", JSON.stringify(feed, null, 2) + "\n");
+
+// shields.io endpoint badge — https://shields.io/badges/endpoint-badge
+const badgeColor = breached ? "red" : errored ? "orange" : "brightgreen";
+const badge = {
+  schemaVersion: 1,
+  label: "bridges",
+  message: `${backed}/${routes.length} backed${breached ? `, ${breached} breached` : ""}`,
+  color: badgeColor,
+};
+writeFileSync("badge.json", JSON.stringify(badge) + "\n");
+
+console.error(`wrote STATUS.md, STATUS.json, badge.json — ${backed}/${routes.length} backed${breached ? `, ${breached} breached` : ""}`);

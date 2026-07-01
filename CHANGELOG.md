@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Machine-readable status feed + live badge.** `npm run gen:status` now emits,
+  alongside `STATUS.md`, a `STATUS.json` feed (`{ generatedAt, overall, backed,
+breached, errored, total, routes[] }`) that any monitor or dashboard can consume,
+  and a [shields.io](https://shields.io) endpoint `badge.json` that renders the live
+  **bridges: N/N backed** badge now shown in the README. The scheduled
+  [`bridge-status` workflow](.github/workflows/bridge-status.yml) commits all three
+  artifacts back only when the numbers change.
+
 - **Live bridge-status page + more verified routes.** `STATUS.md` is an
   auto-generated "is every bridge in the registry backed right now?" page —
   `npm run gen:status` (`scripts/gen-status.mjs`) runs `solvency --all` and
