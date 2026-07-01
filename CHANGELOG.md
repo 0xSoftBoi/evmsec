@@ -8,6 +8,104 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`freeze-authority <token>` command + check**: the targeted-censorship sibling
+  of `pause-guardian` — can an _individual_ holder be frozen (or their balance
+  seized), and who holds that power? Detects the two dominant on-chain patterns:
+  **FiatToken** (USDC-class) `blacklist(addr)` gated by a `blacklister()` role, and
+  **Tether** (USDT) owner-gated `addBlackList(addr)` plus `destroyBlackFunds(addr)`
+  (which _burns_ a frozen balance — a seize, flagged distinctly). Resolves the
+  actual authority (`blacklister()` or `owner()`), classifies it, and exits
+  non-zero when a single EOA can freeze/seize any holder. Part of `audit`. Pure
+  logic (`freeze-core.ts`) unit-tested; validated live — USDC's blacklister is a
+  single EOA (`freeze-authority: critical`), USDT's owner can freeze+seize
+  (`warning`). Both pinned by the incident fixtures.
+- **Incident fixtures — verdicts regression-tested against real mainnet contracts,
+  offline** (`src/incident-fixtures.test.ts`, `src/testing/replay-provider.ts`,
+  `src/fixtures/incidents/`, `scripts/capture-fixtures.ts`): a record/replay
+  harness captures the exact on-chain reads a check makes (at the ethers
+  `_perform` choke point) against a named contract, commits them, and replays them
+  through the **real** assessors with no network. Pinned so far: USDC (proxy admin
+  is a bare EOA on-chain → `admin-power` critical), USDT / WBTC (owner is an
+  unrecognized controller → warning, not a rubber-stamp), Ethena USDe (a real
+  5-of-10 Gnosis Safe → `ok`; exercises the live `getThreshold`/`getOwners` path
+  and guards against over-flagging reasonable multisigs), Compound cUSDC (admin
+  via a non-standard getter → reported unresolved, a documented blind spot), and
+  DAI (not a proxy → no false upgradeability alarm). A drifting heuristic now
+  fails CI. Regenerate with `npm run capture:fixtures`. Replay fidelity was
+  checked directly (every replayed read hits a recording — zero cache misses — so
+  the tests aren't vacuously green).
+- **Check framework + SARIF/JSON for every contract check** (`src/check.ts`,
+  `src/checks/`): the six contract-audit checks are now each a `Check` over a
+  shared `CheckContext` (bytecode fetched **once** and reused across checks),
+  returning a structured `CheckReport`. A single runner parses args, runs one
+  check or the whole family, and renders **human / `--json` / `--sarif`** output —
+  so every check (not just `audit`) gains a machine-readable aggregate and
+  GitHub code-scanning (SARIF 2.1.0) support, and `--fail-on <severity>` controls
+  the exit threshold (`critical` default, or `warning`). The standalone commands
+  are now thin wrappers over the same engine; ~600 lines of per-command argument
+  parsing, `getCode`, proxy-resolution, and printing duplication were removed, and
+  `audit` no longer fakes aggregation by snooping `process.exitCode`.
+- **GitHub Action** (`action.yml`): a composite action that runs any evmsec
+  command in CI via an `args` input (e.g. `audit 0xContract --chain ethereum`).
+  It builds evmsec from its own checkout, so it works today without an npm
+  release; `uses: 0xSoftBoi/evmsec@main`. A failing check fails the job. README
+  documents a ready-to-paste `security.yml` workflow.
+- **`audit <address>` meta-command**: runs every check that applies to a generic
+  contract — `verification-status`, `compiler-bugs`, `upgradeability`,
+  `admin-power`, `mint-authority`, `pause-guardian` — and prints one consolidated
+  report card with a pass/fail per check and an overall verdict. Exits non-zero if
+  any check fails, so `evmsec audit 0x… || alert` covers the lot in one CI line.
+  `oracle-hygiene` is intentionally excluded (it only applies to price feeds and
+  would revert on a generic contract).
+- **`verification-status <address>` command**: is the contract's source verified?
+  Queries Sourcify v2 (`GET /v2/contract/{chainId}/{address}`) and classifies the
+  result as a full **exact match**, a **partial match** (bytecode matches but the
+  metadata hash differs — functionally verified), or **unverified**. Exits
+  non-zero when no verified source is found; a provider that's unreachable reads
+  `unknown` (a network condition, not a verdict) and does not fail CI. Server
+  overridable with `--sourcify`, HTTP timeout via `EVMSEC_HTTP_TIMEOUT_MS`. Pure
+  classification (`verification-core.ts`) is unit-tested; validated live against
+  Sourcify.
+- **`compiler-bugs <address>` command**: was this contract compiled with a solc
+  version subject to a known compiler bug? Reads the exact solc version from the
+  bytecode's CBOR metadata trailer (following the proxy to its implementation)
+  and matches it against the Solidity team's own published `bugs.json` /
+  `bugs_by_version.json` (bundled in `src/data/solc-bugs.ts`, regenerated with
+  `npm run gen:solc-bugs`). Each finding links to the official writeup.
+  Condition-gated bugs (viaIR/optimizer/evmVersion) read `warning` with their
+  conditions surfaced, since applicability can't be read from bytecode. In
+  practice this is a **warning-level check**: every high-severity solc bug in the
+  CBOR-metadata era (≥0.4.22) is condition-gated, so the `critical`
+  (unconditional-high) path — while implemented and unit-tested — effectively
+  never fires for a real modern contract. A contract that strips metadata or
+  predates CBOR tags reports "version not found" rather than guessing. Pure logic
+  (`compiler-core.ts`) is unit-tested; validated live (USDC's 0.6.12
+  implementation, pre-CBOR WETH).
+- **`oracle-hygiene <feed>` command**: is a Chainlink-style price feed fresh and
+  safe to read _right now_? Pulls `latestRoundData()` and flags the failure modes
+  a consumer can't see when it blindly trusts the price — a **stale** answer
+  (older than `--heartbeat`, default 3600s → critical), a **zero/negative**
+  answer (critical), an **incomplete** round (`updatedAt == 0`), and a
+  **carried-over** round (`answeredInRound < roundId` → elevated). On L2s,
+  `--sequencer <uptime-feed>` adds the Chainlink sequencer-uptime check: a
+  sequencer reported **down** is critical (a fresh price is meaningless if the
+  chain was offline), and one that only just restarted (within `--grace`, default
+  1h) is elevated. Staleness is measured against the chain's own latest-block
+  timestamp. Exits non-zero when the feed is unusable. Pure logic in
+  `oracle-core.ts` is unit-tested; validated live against mainnet ETH/USD and the
+  Arbitrum sequencer feed.
+- **`admin-power <address>` command**: answers not just _who_ controls a contract
+  (as `upgradeability` does) but _what kind_ of authority it is — the question
+  that decides the blast radius. Resolves the controlling authority (EIP-1967 /
+  legacy proxy admin slot, else `owner()`) and classifies it: a single **EOA**
+  (critical, fails CI), a **Gnosis Safe** (reads `getThreshold()`/`getOwners()` —
+  a 1-of-N Safe is treated as a single key and fails CI; m-of-n reads info with
+  the threshold shown), a **timelock** (reads OZ `getMinDelay()` or Compound-style
+  `delay()` — a delay of 0 or below the `--min-delay` floor, default 24h, is
+  elevated), an unrecognized **contract** (elevated — inspect; may be a ProxyAdmin
+  or custom controller), or **renounced** (zero address). Exits non-zero when a
+  single key controls the contract. Pure classification logic
+  (`authority-core.ts`) is unit-tested offline.
 - **`message-proof` command**: verifies that a cross-chain message was _validly
   attested_ (not just that tokens arrived) by checking the attestation on the
   destination via a single `eth_call` — Wormhole `Core.parseAndVerifyVM(vaa)`
@@ -88,6 +186,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`admin-power` no longer passes an unresolved controller**: when no EIP-1967
+  admin and no `owner()` can be resolved, the verdict now reads `⚠ WARNING`
+  ("control may live in a custom scheme; inspect") instead of a clean `ok` — a
+  security tool saying "I couldn't tell who controls this" shouldn't look like a
+  pass. Renounced (zero address) still reads `ok`. Pinned by the DAI / cUSDC
+  incident fixtures.
+- **Safe-threshold heuristic — now conservative, and honestly framed**: an
+  earlier iteration of this changelog claimed the check flags a 2-of-5 Safe "the
+  exact shape of the Harmony Horizon bridge." That was doubly wrong: Harmony's
+  bridge was a **custom** 2-of-5, not a Gnosis Safe (this path never classifies
+  it), and the rule as written also flagged ordinary configs like a 5-of-10 Safe
+  (real example: Ethena USDe) as a warning. Corrected: `admin-power` flags a
+  Gnosis Safe only when the threshold is a **strict minority** of signers
+  (`2·threshold < owners`, e.g. 2-of-5, 4-of-10); a threshold at least half
+  (2-of-3, 3-of-5, 5-of-10) is `info`. 1-of-N is still `critical`. The summary now
+  states plainly that threshold is a _weak_ signal — Ronin was 5-of-9 (a majority)
+  and still lost $625M. Pinned by the Ethena USDe fixture (a real 5-of-10 Safe →
+  `ok`). Pure logic in `authority-core.ts`, unit-tested.
+- **Unified, sharper check output**: every contract-audit command now renders
+  through the shared framework — a consistent severity-marked report with
+  structured evidence (addresses get explorer links) and a report card for
+  `audit`. `compiler-bugs` now surfaces only the bugs that drive the verdict
+  (medium and above) and collapses the long tail of low/very-low bugs into a
+  count, instead of dumping the whole list. JSON output changed shape to the
+  unified `{ overall, counts, reports[] }` aggregate (pre-1.0, unreleased).
 - **`mint-authority` resolves a FiatToken `masterMinter`**: when a token exposes
   `masterMinter()` (USDC-class), the tool reads and classifies it (the
   masterMinter, not `owner()`, gates minting) and the verdict reflects it — an
@@ -105,6 +228,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`pause-guardian` misattributed the pause key on FiatToken tokens**: USDC-class
+  tokens gate pausing through a separate `pauser()` role, but the check assumed
+  `owner()` and pointed at the wrong address (hedged with "if it gates pausing").
+  It now detects the `pauser()` getter and resolves/classifies that address
+  directly — for USDC it correctly reports the pause authority as a single EOA via
+  `pauser()` (0x4914…8566), not the owner. Mirrors the existing FiatToken
+  `masterMinter()` handling in `mint-authority`. Pinned by the USDC fixture, which
+  now asserts `pause-guardian: critical`. Unit-tested in `pause-guardian-core.ts`,
+  including that an EOA `owner()` no longer forces a critical when a contract
+  `pauser()` actually holds the key.
 - **Test discovery on Node 20**: the previous `tsx --test src/**/*.test.ts`
   relied on glob expansion that neither POSIX `sh` nor the Node 20 test runner
   performs, so the Node 20 CI leg discovered no test files. Discovery is now

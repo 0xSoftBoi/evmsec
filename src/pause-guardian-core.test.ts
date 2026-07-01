@@ -9,6 +9,7 @@ const dispatcher = (...sels: string[]): string => "0x" + sels.map(push4).join("5
 const PAUSE = PAUSE_SELECTORS.pause;
 const PAUSED = PAUSE_SELECTORS.paused;
 const OWNER = PAUSE_SELECTORS.owner;
+const PAUSER = PAUSE_SELECTORS.pauser;
 const HAS_ROLE = PAUSE_SELECTORS.hasRole;
 
 test("PAUSE_SELECTORS match keccak256 of their signatures", () => {
@@ -17,6 +18,7 @@ test("PAUSE_SELECTORS match keccak256 of their signatures", () => {
     unpause: "unpause()",
     paused: "paused()",
     owner: "owner()",
+    pauser: "pauser()",
     hasRole: "hasRole(bytes32,address)",
     grantRole: "grantRole(bytes32,address)",
   };
@@ -64,6 +66,44 @@ test("classifyPauseGuardian: AccessControl with an EOA pauser → critical", () 
   ]);
   assert.equal(v.risk, "critical");
   assert.equal(v.fail, true);
+});
+
+test("classifyPauseSurface: FiatToken pauser() getter is detected", () => {
+  const s = classifyPauseSurface(dispatcher(PAUSE, PAUSED, OWNER, PAUSER));
+  assert.equal(s.pausable, true);
+  assert.equal(s.hasPauserGetter, true);
+});
+
+test("classifyPauseGuardian: FiatToken pauser() as EOA → critical (not attributed to owner)", () => {
+  const s = classifyPauseSurface(dispatcher(PAUSE, OWNER, PAUSER));
+  // owner is a contract, but the pauser EOA is what actually gates pausing.
+  const v = classifyPauseGuardian(s, false, "contract", "0x00000000000000000000000000000000000000C0", undefined, {
+    address: "0x00000000000000000000000000000000000000A1",
+    kind: "eoa",
+  });
+  assert.equal(v.risk, "critical");
+  assert.equal(v.fail, true);
+  assert.ok(v.summary.includes("pauser()"));
+  assert.ok(v.summary.includes("0x00000000000000000000000000000000000000A1"));
+});
+
+test("classifyPauseGuardian: FiatToken pauser() as a contract → elevated, no CI fail", () => {
+  const s = classifyPauseSurface(dispatcher(PAUSE, OWNER, PAUSER));
+  // owner is an EOA — the OLD logic would have said critical; the pauser is what counts.
+  const v = classifyPauseGuardian(s, false, "eoa", "0x00000000000000000000000000000000000000A1", undefined, {
+    address: "0x00000000000000000000000000000000000000C0",
+    kind: "contract",
+  });
+  assert.equal(v.risk, "elevated");
+  assert.equal(v.fail, false);
+  assert.ok(v.summary.includes("pauser()"));
+});
+
+test("classifyPauseGuardian: FiatToken pauser() unreadable → elevated (not a false critical)", () => {
+  const s = classifyPauseSurface(dispatcher(PAUSE, OWNER, PAUSER));
+  const v = classifyPauseGuardian(s, false, "eoa", "0x00000000000000000000000000000000000000A1", undefined, null);
+  assert.equal(v.risk, "elevated");
+  assert.equal(v.fail, false);
 });
 
 test("classifyPauseGuardian: not pausable → info, no fail", () => {

@@ -6,14 +6,26 @@ import { pqReadiness } from "./commands/pq-readiness.js";
 import { mintAuthority } from "./commands/mint-authority.js";
 import { pauseGuardian } from "./commands/pause-guardian.js";
 import { messageProof } from "./commands/message-proof.js";
+import { adminPower } from "./commands/admin-power.js";
+import { oracleHygiene } from "./commands/oracle-hygiene.js";
+import { compilerBugs } from "./commands/compiler-bugs.js";
+import { verificationStatus } from "./commands/verification-status.js";
+import { freezeAuthority } from "./commands/freeze-authority.js";
+import { audit } from "./commands/audit.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
+  audit,
   solvency,
   upgradeability,
+  "admin-power": adminPower,
+  "oracle-hygiene": oracleHygiene,
+  "compiler-bugs": compilerBugs,
+  "verification-status": verificationStatus,
   settlement,
   "pq-readiness": pqReadiness,
   "mint-authority": mintAuthority,
   "pause-guardian": pauseGuardian,
+  "freeze-authority": freezeAuthority,
   "message-proof": messageProof,
 };
 
@@ -22,13 +34,24 @@ const HELP = `evmsec — a security CLI for EVM chains
 usage: evmsec <command> [args]
 
 commands:
+  audit <address>               run every applicable check on a contract and
+                                  print one report card (non-zero if any fails)
   solvency <route-id|--all>     is a lock-and-mint bridge fully backed?
                                   (locked collateral ≥ wrapped supply minted)
   upgradeability <address>      EIP-1967 proxy check: upgradeable? who controls it?
+  admin-power <address>         who controls it — EOA / Safe (m-of-n) / timelock?
+                                  (classifies the proxy admin or owner; delay-aware)
   mint-authority <token>        can the wrapped supply be inflated, and by whom?
                                   (mint entrypoints + owner/MINTER_ROLE + cap)
   pause-guardian <token>        can transfers be frozen, are they now, and who
                                   holds the pause key? (owner/PAUSER_ROLE)
+  freeze-authority <token>      can an individual holder be frozen/seized, and
+                                  who holds that power? (blacklist/blacklister)
+  oracle-hygiene <feed>         is this price feed fresh & safe to read now?
+                                  (staleness vs heartbeat, zero answer, L2 sequencer)
+  compiler-bugs <address>       was it built with a solc version that has a
+                                  known compiler bug? (reads version from metadata)
+  verification-status <addr>    is this contract's source verified? (Sourcify)
   settlement                    did a cross-chain intent actually get filled?
                                   (--protocol erc7683 --intent-tx --fill-tx)
   message-proof <--layer>       was a cross-chain message validly attested?
@@ -55,13 +78,20 @@ global:
 exit code is non-zero when a bridge is undercollateralized — drop it in a cron.
 
 examples:
+  evmsec audit 0xContract --chain ethereum         # one report card, every check
   evmsec solvency --all
   evmsec solvency my-route --since 2024-01-01      # when did backing break?
   evmsec solvency --lock-chain ethereum --escrow 0xEsc --token 0xUSDC \\
                   --mint-chain polygon --minted 0xWrapped --json
   evmsec upgradeability 0xToken --chain base
+  evmsec admin-power 0xProxy --chain ethereum --min-delay 48
   evmsec mint-authority 0xWrappedToken --chain polygon --json
   evmsec pause-guardian 0xWrappedToken --chain polygon
+  evmsec freeze-authority 0xUSDC --chain ethereum
+  evmsec oracle-hygiene 0xFeed --chain ethereum --heartbeat 3600
+  evmsec oracle-hygiene 0xFeed --chain arbitrum --sequencer 0xSeqUptimeFeed
+  evmsec compiler-bugs 0xContract --chain ethereum --json
+  evmsec verification-status 0xContract --chain ethereum
   evmsec message-proof --layer hyperlane --chain base --id 0xMessageId
   evmsec message-proof --layer wormhole --chain ethereum --vaa 0x01000000... --json
   evmsec settlement --source-chain ethereum --intent-tx 0xOpen \\

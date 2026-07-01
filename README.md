@@ -40,6 +40,99 @@ npm run evmsec -- <command> [args]
 # or: npx tsx src/index.ts <command> [args]
 ```
 
+### `audit` — run every applicable check, one report card
+
+The fastest way in: point `audit` at any contract. It fetches the bytecode
+**once**, runs every check that applies to a generic contract — source
+verification, compiler-bug exposure, upgradeability, admin power, mint authority,
+pause guardian, freeze authority — and prints one report card, severity-ranked,
+with an overall verdict.
+
+```bash
+npm run evmsec -- audit 0xContract --chain ethereum
+```
+
+```
+  Report card — 0x… on Ethereum
+  ────────────────────────────────────────
+  ✓ ok         verification-status
+  ⚠ WARNING    compiler-bugs
+  ✗ CRITICAL   upgradeability
+  ✗ CRITICAL   admin-power
+  ⚠ WARNING    mint-authority
+  ✗ CRITICAL   pause-guardian
+  ✗ CRITICAL   freeze-authority
+  ────────────────────────────────────────
+  OVERALL: ✗ at least one critical finding — blocking.
+```
+
+Every check is one `Check` over a shared context (`src/check.ts`,
+`src/checks/`), so the _same_ assessor drives both `evmsec admin-power` and the
+`audit` row — no duplicated logic, no `process.exitCode` snooping. That also
+means every check gets machine output for free:
+
+- `--json` — a structured aggregate (`{ overall, counts, reports[] }`) for piping.
+- `--sarif` — SARIF 2.1.0 for the [GitHub Security tab](#use-in-ci-github-action).
+- `--fail-on <severity>` — exit non-zero at `critical` (default) or `warning`.
+
+`oracle-hygiene`, `solvency`, `settlement`, and `message-proof` are intentionally
+excluded — they target a feed / route / tx-pair / VAA, not a generic contract.
+It's a heuristic aggregate of on-chain reads, not a substitute for an audit.
+
+#### What it catches (regression-tested against real contracts)
+
+The verdicts below aren't marketing — they're **pinned in a test suite**. Each
+one records the exact on-chain reads against a real mainnet contract
+(`scripts/capture-fixtures.ts`) and replays them offline through the real
+assessors (`src/incident-fixtures.test.ts`), so a heuristic can't drift without a
+test going red. Regenerate with `npm run capture:fixtures`.
+
+_Reports a real on-chain property:_
+
+- **USDC** (`0xA0b8…eB48`) → `admin-power: ✗ CRITICAL`. Its FiatTokenProxy upgrade
+  admin (`0x807a…95d2`) is a **plain EOA** on-chain, with no on-chain timelock or
+  multisig gating the upgrade (verify: that address has no code). Read this
+  precisely: it means the upgrade is protected **only** by whatever off-chain key
+  custody Circle uses — an EOA can be backed by MPC/HSM/multi-party signing that
+  evmsec **cannot see**. The critical rating is about what's _enforced on-chain_,
+  not a claim that one person holds a hot key. (See [Limitations](#limitations).)
+- **USDC** also → `freeze-authority: ✗ CRITICAL` and `pause-guardian: ✗ CRITICAL`.
+  Its `blacklister()` is a single EOA that can freeze any individual holder, and
+  its `pauser()` is a single EOA that can freeze _all_ transfers — both correctly
+  attributed to the actual role (not `owner()`). Real, live censorship surface on
+  the largest regulated stablecoin.
+- **USDT** and **WBTC** → `admin-power: ⚠ WARNING`. Their owners are contracts that
+  are **not** a recognized Gnosis Safe or timelock, so the tool flags them for
+  inspection rather than rubber-stamping "it's a contract" — it doesn't claim to
+  know what those controllers are. (USDT also → `freeze-authority: ⚠ WARNING`: the
+  owner can `addBlackList` **and** `destroyBlackFunds` — freeze _and burn_ any
+  holder's balance.)
+
+_Doesn't cry wolf on reasonable setups:_
+
+- **DAI** → `upgradeability: ✓ ok` — correctly identified as **not** a proxy.
+- **Ethena USDe** → `admin-power: ✓ ok`. Its controller is a real **5-of-10 Gnosis
+  Safe**; the tool reads the threshold live (`getThreshold`/`getOwners`) and does
+  **not** flag it — a threshold at least half the signers is an ordinary config.
+  (An earlier version wrongly flagged this; the fixture now guards against it.)
+
+_Honestly scoped where it's blind:_
+
+- **cUSDC** → `admin-power: ⚠ WARNING (not assessed)`. Compound gates admin through
+  a non-standard `admin()` getter evmsec doesn't resolve, so it reports the
+  controller as **unresolved** rather than a green pass — a documented blind spot,
+  pinned as one. Expect the same on DAO-governed tokens (Curve, Frax, Balancer):
+  the tool doesn't understand every governance scheme and says so.
+
+**On the Safe threshold heuristic — a deliberately weak signal.** evmsec flags a
+Gnosis Safe only when the threshold is a _strict minority_ of signers (fewer than
+half, e.g. 2-of-5). But threshold is a poor predictor of safety: **Ronin's bridge
+was 5-of-9 — a majority — and was still drained for $625M** via key compromise,
+and **Harmony's was a custom 2-of-5 that isn't even a Gnosis Safe** (evmsec would
+flag it as an unrecognized controller, not via this path). Signer independence and
+key custody matter far more than the ratio; the heuristic is a nudge to look, not
+a verdict.
+
 ### `solvency` — is the bridge backed?
 
 ```bash
@@ -128,6 +221,41 @@ Reads EIP-1967 slots: is it an upgradeable proxy, what's the implementation, and
 is the upgrade admin a single EOA (one key from a rug) or a contract
 (multisig/timelock)? Add `--json` to drop it into CI.
 
+### `admin-power` — who controls it, and how dangerous is that control?
+
+`upgradeability` tells you _whether_ a contract has an admin and resolves _who_
+it is. `admin-power` answers the question that actually decides the blast radius:
+**what _kind_ of authority is that, and is it a single point of failure?** A
+contract address as the admin is not reassuring on its own — a "multisig" that's
+really 1-of-N is one key, and a timelock with a zero delay gives you no window to
+react to a malicious upgrade.
+
+```bash
+npm run evmsec -- admin-power 0xProxy --chain ethereum [--min-delay 48] [--json]
+```
+
+It resolves the controlling authority (EIP-1967 / legacy proxy admin slot, else
+`owner()`) and classifies it from on-chain reads:
+
+- **EOA** — a single externally-owned key → `critical`, fails CI.
+- **Gnosis Safe** — reads `getThreshold()` / `getOwners()`. A `1-of-N` Safe is
+  effectively a single key → `critical`, fails CI; an `m-of-n` (m ≥ 2) reads
+  `info` with the threshold shown.
+- **Timelock** — reads `getMinDelay()` (OZ `TimelockController`) or `delay()`
+  (Compound-style). A delay of 0 or below the `--min-delay` floor (default 24h)
+  is `elevated` — too short an exit window; at/above the floor it's `info`.
+- **Unrecognized contract** — `elevated`: it may be a `ProxyAdmin` or custom
+  controller; inspect it (re-run on its `owner()`).
+- **Zero address** — renounced.
+
+```bash
+evmsec admin-power 0xProxy --min-delay 48 || alert "proxy is single-key controlled"
+```
+
+Honestly scoped like the others: a heuristic from on-chain reads, not a proof of
+the full privileged-role set — confirm against source. Pure classification logic
+(`authority-core.ts`) is unit-tested offline.
+
 ### `mint-authority` — can the wrapped supply be inflated, and by whom?
 
 `solvency` says a bridge is backed _now_. But a token can read 100% backed today
@@ -173,11 +301,122 @@ npm run evmsec -- pause-guardian 0xWrappedToken --chain polygon [--json]
 
 Same shape as `mint-authority`: follows the proxy, detects the Pausable surface
 and auth model, reads `paused()` to report the **current** state, and resolves
-the guardian — Ownable `owner()` or the enumerated `PAUSER_ROLE` holders,
-classified EOA vs contract. **Exit code is non-zero when a single EOA can freeze
-transfers.** A currently-paused token is flagged prominently regardless of who
-holds the key. Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is
+the guardian. It resolves the _actual_ pause authority rather than assuming
+`owner()`:
+
+- **FiatToken (USDC-class)** — a `pauser()` getter gates pausing, **not**
+  `owner()`. The check reads and classifies `pauser()` directly (USDC's is a
+  single EOA — a real single-key freeze authority, correctly attributed to the
+  pauser, not the owner).
+- **OpenZeppelin AccessControl** — enumerates the `PAUSER_ROLE` holders.
+- **Ownable** — reads `owner()`.
+
+**Exit code is non-zero when a single EOA can freeze transfers.** A
+currently-paused token is flagged prominently regardless of who holds the key.
+Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is unit-tested. (Off-chain
+key custody still applies — see [Limitations](#limitations).)
+
+### `freeze-authority` — can an individual holder be frozen or seized?
+
+`pause-guardian` covers freezing _everyone at once_. This is the targeted
+censorship sibling: **can a specific holder be frozen — or their balance burned —
+and who holds that power?** Two dominant on-chain patterns:
+
+- **FiatToken (USDC-class)** — a `blacklister` role can `blacklist(addr)`. The
+  check resolves `blacklister()` and classifies it.
+- **Tether (USDT)** — an owner-gated `addBlackList(addr)`, plus
+  `destroyBlackFunds(addr)` which **burns** a blacklisted balance (a seize, not
+  just a freeze). The check resolves `owner()` and flags whether seizure is
+  possible.
+
+```bash
+npm run evmsec -- freeze-authority 0xToken --chain ethereum [--json]
+```
+
+**Exit code is non-zero when a single EOA can freeze/seize any holder.** On USDC
+this reports the `blacklister()` — a single EOA that can freeze any account; on
+USDT it reports the owner contract and notes that balances can be seized. Tokens
+without a recognized blacklist pattern read `ok`. Same on-chain-authority caveat
+as the other keys (see [Limitations](#limitations)); logic in `freeze-core.ts` is
 unit-tested.
+
+### `oracle-hygiene` — is this price feed fresh and safe to read right now?
+
+A stale or broken price feed is one of the most common DeFi loss causes: a
+protocol that reads `latestRoundData()` and trusts it will price collateral off a
+number that stopped updating hours ago, went to zero, or was frozen while an L2
+sequencer was down. Each of those is an on-chain-readable invariant.
+
+```bash
+npm run evmsec -- oracle-hygiene 0xFeed --chain ethereum --heartbeat 3600 [--json]
+# on an L2, also check the sequencer-uptime feed:
+npm run evmsec -- oracle-hygiene 0xFeed --chain arbitrum --sequencer 0xSeqUptimeFeed
+```
+
+Pulls the latest round (Chainlink-style aggregator) and flags:
+
+- **staleness** — the answer is older than `--heartbeat` (default 3600s) →
+  `critical`, fails CI;
+- **zero / negative answer** — never a valid price → `critical`, fails CI;
+- **incomplete round** — `updatedAt == 0` → `critical`;
+- **carried-over round** — `answeredInRound < roundId` → `elevated`;
+- **L2 sequencer** — with `--sequencer <uptime-feed>`, a sequencer reported
+  **down** is `critical` (a fresh-looking price means nothing if the chain it
+  priced was offline), and one that only just restarted (within `--grace`,
+  default 1h) is `elevated`.
+
+Staleness is measured against the chain's own latest-block timestamp, not wall
+clock. **Freshness/liveness only** — this can't attest the price is _correct_ or
+sourced from enough nodes; that's a different lane. Pure logic in
+`oracle-core.ts` is unit-tested offline.
+
+### `compiler-bugs` — built with a solc version that has a known bug?
+
+Solidity ships with bugs, and the team publishes _exactly which compiler versions
+each one affects_. A contract's bytecode usually carries the exact solc version
+it was built with in its CBOR metadata trailer — so "was this compiled with a
+version subject to a known bug?" is a fully deterministic, on-chain-readable
+question.
+
+```bash
+npm run evmsec -- compiler-bugs 0xContract --chain ethereum [--json]
+```
+
+Reads the solc version from the metadata (following the proxy to its
+implementation, since that's where the logic and its compiler live) and matches
+it against the Solidity team's own `bugs.json` / `bugs_by_version.json`
+(bundled — regenerate with `npm run gen:solc-bugs`). Each finding links to the
+official writeup.
+
+**In practice this is a warning-level check, and the README should say so.** A
+bug being present in the compiler version is necessary but not sufficient — most
+bite only under specific compile settings (`viaIR`, optimizer, `evmVersion`) that
+can't be read from bytecode, so they read `⚠ WARNING (verify)` with the
+conditions surfaced. In fact _every_ high-severity solc bug from the CBOR-metadata
+era (≥0.4.22) is condition-gated, so the `critical` / non-zero-exit path — though
+implemented and tested — effectively never fires for a real modern contract. Use
+this to learn "your compiler is subject to X, go check the conditions," not as a
+hard gate. A contract that strips metadata, is Vyper/assembly, or predates CBOR
+tags reports "version not found" rather than guessing. Pure logic in
+`compiler-core.ts` is unit-tested offline.
+
+### `verification-status` — is this contract's source verified?
+
+A contract holding value whose source isn't verified anywhere is a yellow flag in
+its own right: nobody can review what the bytecode actually does, and every other
+evmsec check is working from bytecode alone.
+
+```bash
+npm run evmsec -- verification-status 0xContract --chain ethereum [--json]
+```
+
+Queries Sourcify v2 (`GET /v2/contract/{chainId}/{address}`) and classifies the
+result: a full **exact match**, a **partial match** (bytecode matches but the
+metadata hash differs — functionally verified), or **unverified**. **Exit code is
+non-zero when no verified source is found.** A provider that's unreachable reads
+`unknown` (a network condition, not a verdict) and does _not_ fail CI. Override
+the server with `--sourcify <url>`; the HTTP timeout is `EVMSEC_HTTP_TIMEOUT_MS`.
+Pure classification (`verification-core.ts`) is unit-tested offline.
 
 ### `settlement` — did the cross-chain intent actually get filled?
 
@@ -311,6 +550,95 @@ retry on transient errors only — timeouts, 429s, 5xx, resets — while real er
 default 5) and isolates per-route failures: one unreadable route is reported as
 `ERROR` and fails the exit code, without masking the others.
 
+## Limitations
+
+evmsec reads on-chain state and applies opinionated rules. That's its whole
+value — and its ceiling. Be clear-eyed about what it **cannot** see:
+
+- **An EOA on-chain ≠ a single hot key.** When an admin/owner is an EOA, evmsec
+  reports single-key control because that's what's _enforced on-chain_. But that
+  address may be an MPC/HSM/threshold-signing setup off-chain (Fireblocks and
+  similar) requiring multiple approvals. evmsec can't observe off-chain custody,
+  so `critical` here means "no on-chain multisig/timelock," not "one person can
+  rug this tomorrow."
+- **Multisig threshold is a weak predictor.** Ronin (5-of-9, a majority) was
+  drained for $625M; Harmony (2-of-5, and not even a Gnosis Safe) for ~$100M. A
+  healthy-looking ratio says little about signer independence, key custody, or
+  social-engineering exposure. Treat the Safe check as a nudge, not a verdict.
+- **Governance evmsec doesn't resolve → `warning (not assessed)`, not a finding.**
+  It resolves EIP-1967 proxy admins and `owner()`. Contracts governed by a DAO
+  (Aragon/Governor), AccessControl roles, or a non-standard `admin()`
+  (Compound-style) come back **unresolved** — flagged for manual review, which is
+  fail-closed, not an accusation. Curve, Frax, Balancer, and cUSDC all land here.
+- **`compiler-bugs` is warning-level in practice.** Every high-severity solc bug
+  in the CBOR-metadata era (≥0.4.22) is _conditional_ on compile settings evmsec
+  can't read from bytecode (viaIR/optimizer/ABIEncoderV2). So the `critical`
+  (unconditional-high) path effectively never fires for a real modern contract —
+  the useful output is the warning-level "this version is subject to X; verify."
+- **Bytecode heuristics aren't proofs.** Mint/pause/upgrade detection scans the
+  dispatcher for selectors and reads a few slots. It can miss non-standard
+  patterns and can't reason about custom logic. Every verdict says "confirm
+  against source" because you should.
+- **Role enumeration is best-effort.** `MINTER_ROLE`/`PAUSER_ROLE` holders come
+  from AccessControlEnumerable or `RoleGranted` history; a public RPC that caps
+  `getLogs` ranges can return an incomplete set (the tool says when it does).
+
+None of this is a reason not to run it — a fast, honest, on-chain-property check
+in CI catches real regressions. It _is_ a reason not to treat a clean run as an
+audit.
+
+## Use in CI (GitHub Action)
+
+Every check exits non-zero on a failing verdict, which is the whole point: drop
+it into a workflow and a regression fails the build. A composite action ships in
+this repo ([`action.yml`](action.yml)) — it builds evmsec from source, so it
+works without an npm release:
+
+```yaml
+# .github/workflows/security.yml
+name: security
+on: [push, schedule]
+jobs:
+  evmsec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: 0xSoftBoi/evmsec@main
+        with:
+          args: "audit 0xYourContract --chain ethereum"
+        env:
+          ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
+```
+
+Run any command via `args` — `audit 0x…`, `solvency --all`, `oracle-hygiene 0xFeed
+--chain arbitrum --sequencer 0x…`. Point an RPC env var at a reliable endpoint
+(public RPCs are rate-limited). Without the Action you can equally
+`npx tsx src/index.ts <command>` or, once published, `npx evmsec <command>` in
+any `run:` step.
+
+**Findings in the Security tab.** Every contract-audit command (`audit`,
+`admin-power`, `mint-authority`, …) takes `--sarif`, so you can surface findings
+as GitHub code-scanning alerts instead of digging through logs:
+
+```yaml
+jobs:
+  evmsec:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # required to upload SARIF
+    steps:
+      - uses: 0xSoftBoi/evmsec@main
+        with:
+          args: "audit 0xYourContract --chain ethereum --sarif > evmsec.sarif"
+        env:
+          ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: evmsec.sarif
+```
+
+Use `--fail-on warning` to make warnings (not just criticals) block the build,
+or `--json` for a structured aggregate to pipe elsewhere.
+
 ## Layout
 
 ```
@@ -327,15 +655,36 @@ src/
   settlement-core.ts         pure delivery-matching + verdict logic (protocol-agnostic)
   protocols/                 pluggable settlement decoders (Protocol interface; erc7683, across, cow)
   pq-core.ts                 pure post-quantum scheme classification (bytecode → verdict)
+  authority-core.ts          pure authority classification (EOA / Safe / timelock → verdict)
+  oracle-core.ts             pure price-feed hygiene (staleness / zero / sequencer → verdict)
+  compiler-core.ts           pure solc-version extraction (CBOR) + bug-list matching
+  data/solc-bugs.ts          bundled solc bug lists (derived; npm run gen:solc-bugs)
+  verification-core.ts       pure source-verification verdict (Sourcify match → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification
+  freeze-core.ts             pure blacklist/freeze capability + authority classification
   *-core.test.ts             unit tests for the pure cores (no network)
+  check.ts                   the check framework: Finding/Report types + human/JSON/SARIF renderers
+  checks/                    one assessor per contract-audit check (over the pure cores)
+    run.ts                   shared runner: parse → fetch bytecode once → run checks → render
+    registry.ts              the contract-audit family (what `audit` runs)
+    onchain.ts               shared on-chain reads (proxy/authority/Safe/timelock probes)
+    {upgradeability,authority,compiler,verification,mint,pause,freeze}.ts
+  testing/replay-provider.ts record/replay provider (test-only; excluded from the build)
+  fixtures/incidents/*.json  pinned real-contract reads + expected verdicts (offline replay)
+  incident-fixtures.test.ts  replays the fixtures through the real assessors, no network
   bridges.ts                 route registry loader
-  commands/
+  commands/                  thin CLI wrappers (each runs one check, or the whole family)
+    audit.ts                 meta-command: run every applicable check → report card
     solvency.ts              flagship: lock-vs-mint backing check
     upgradeability.ts        EIP-1967 / legacy proxy admin risk
+    admin-power.ts           what kind of authority controls it (EOA/Safe/timelock)?
     mint-authority.ts        who can inflate the wrapped supply?
     pause-guardian.ts        who can freeze transfers?
+    freeze-authority.ts      who can freeze/seize an individual holder? (blacklist)
+    oracle-hygiene.ts        is this price feed fresh & safe to read now?
+    compiler-bugs.ts         built with a solc version that has a known bug?
+    verification-status.ts   is this contract's source verified? (Sourcify)
     settlement.ts            cross-chain intent fill verification (erc7683/across/cow)
     message-proof.ts         cross-chain message attestation (Wormhole/Hyperlane)
     pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)
@@ -359,16 +708,25 @@ npm run typecheck     # strict tsc, no emit
 npm test              # node:test via tsx — pure logic, no network
 npm run test:coverage # the same, with V8 coverage
 npm run validate:registry  # check bridges.json (shape, chains, checksums, sources)
+npm run capture:fixtures   # re-record the incident fixtures from live mainnet
 npm run build         # compile to dist/ (what `prepublishOnly` ships)
 ```
 
 The backing math, the multi-asset summation, the forensic bisection, the
 `--watch` transition/degrade logic, the registry validator, the proxy-slot
-parsing, the PQ / mint-authority / pause-guardian classifiers, the settlement
+parsing, the PQ / authority / mint-authority / pause-guardian / oracle-hygiene
+classifiers, the settlement
 decoders + fill-discovery + diagnosis, the VAA parser / attestation classifiers,
-and the RPC retry/concurrency helpers are unit-tested and run offline. Test
-discovery is explicit (`scripts/run-tests.mjs`) so it behaves identically across
-shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
+and the RPC retry/concurrency helpers are unit-tested and run offline.
+
+**Incident fixtures.** The end-to-end verdicts are regression-tested against
+_real mainnet contracts_ without a network: `scripts/capture-fixtures.ts` records
+the exact on-chain reads (via a `_perform`-level recording provider) against
+named contracts and pins the expected severity; `src/incident-fixtures.test.ts`
+replays those reads through the real assessors offline. So "USDC's proxy admin is
+a single key" and "DAI isn't a proxy" are asserted facts, not prose — and a
+drifting heuristic fails CI. Test discovery is explicit (`scripts/run-tests.mjs`)
+so it behaves identically across shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
 typecheck, and build once, plus the test suite on Node 20 and 22, for every push
 and PR.
 
