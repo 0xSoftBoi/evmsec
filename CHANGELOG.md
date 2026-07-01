@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Source verification now consults Etherscan as well as Sourcify.** The
+  `verification-status` check falls back to Etherscan's multichain v2 API
+  (`getsourcecode`) when Sourcify has no match and an `ETHERSCAN_API_KEY` is set — so a
+  contract verified on only the explorer (very common) is no longer falsely flagged
+  `unverified`. Sourcify's precise exact/partial match still wins when present; the
+  verdict now reports which provider settled it (`verified by: sourcify | etherscan`),
+  and only fails CI when a reachable provider says "not verified" and none says it is.
+  The pure classifier (`verification-core.ts`) is unit-tested across every
+  Sourcify×Etherscan combination.
+
 - **Broader route & chain coverage.** Added **Linea** and **Scroll** to the chain
   config (so `audit` and ad-hoc `solvency` reach them) and two new live-verified routes
   to the registry: **base-usdbc** (USDC→Base USDbC via the L1StandardBridge, ~103%) and
