@@ -1,9 +1,9 @@
 {
-  "_comment": "Illustrative routes — VERIFY every address against the bridge's own docs/source before trusting a result. Override with EVMSEC_BRIDGES=/path/to/your.json. Contributions of verified routes welcome.",
+  "_comment": "Real lock-and-mint bridge routes, each verified live (locked collateral ≥ minted supply) before inclusion. Escrows and mappings can change — re-verify against each bridge's own docs/contracts before relying on a number; override the whole set with EVMSEC_BRIDGES=/path/to/your.json. Contributions of verified routes welcome.",
   "routes": [
     {
-      "id": "example-usdc-eth-to-polygon",
-      "bridge": "Polygon PoS (example — verify)",
+      "id": "polygon-pos-usdc",
+      "bridge": "Polygon PoS",
       "asset": "USDC.e",
       "lock": {
         "chain": "ethereum",
@@ -14,8 +14,88 @@
         "chain": "polygon",
         "token": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
       },
-      "verified": false,
-      "notes": "Polygon PoS ERC20 bridge: tokens lock in the RootChainManager/predicate on L1 and a mapped child token is minted on Polygon. Addresses here are illustrative — confirm the current predicate/escrow before relying on the number."
+      "verified": true,
+      "notes": "USDC bridged to Polygon PoS as USDC.e. Escrow is the Polygon PoS ERC20 predicate (holds locked ERC20s for the RootChainManager). Escrow: https://etherscan.io/address/0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf — verified BACKED at seed time."
+    },
+    {
+      "id": "polygon-pos-dai",
+      "bridge": "Polygon PoS",
+      "asset": "DAI",
+      "lock": {
+        "chain": "ethereum",
+        "escrow": "0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf",
+        "token": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+      },
+      "mint": {
+        "chain": "polygon",
+        "token": "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
+      },
+      "verified": true,
+      "notes": "DAI bridged to Polygon PoS via the ERC20 predicate. Escrow: https://etherscan.io/address/0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf — verified BACKED at seed time (mildly over-collateralized)."
+    },
+    {
+      "id": "polygon-pos-wbtc",
+      "bridge": "Polygon PoS",
+      "asset": "WBTC",
+      "lock": {
+        "chain": "ethereum",
+        "escrow": "0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf",
+        "token": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+      },
+      "mint": {
+        "chain": "polygon",
+        "token": "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6"
+      },
+      "verified": true,
+      "notes": "WBTC bridged to Polygon PoS via the ERC20 predicate. Escrow: https://etherscan.io/address/0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf — verified BACKED at seed time."
+    },
+    {
+      "id": "arbitrum-dai-maker",
+      "bridge": "Arbitrum (MakerDAO DAI bridge)",
+      "asset": "DAI",
+      "lock": {
+        "chain": "ethereum",
+        "escrow": "0xA10c7CE4b876998858b1a9E12b10092229539400",
+        "token": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+      },
+      "mint": {
+        "chain": "arbitrum",
+        "token": "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"
+      },
+      "verified": true,
+      "notes": "DAI bridged to Arbitrum One via MakerDAO's dedicated L1 escrow. Escrow: https://etherscan.io/address/0xA10c7CE4b876998858b1a9E12b10092229539400 — verified BACKED at seed time."
+    },
+    {
+      "id": "arbitrum-wbtc-gateway",
+      "bridge": "Arbitrum (canonical bridge)",
+      "asset": "WBTC",
+      "lock": {
+        "chain": "ethereum",
+        "escrow": "0xa3A7B6F88361F48403514059F1F16C8E78d60EeC",
+        "token": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+      },
+      "mint": {
+        "chain": "arbitrum",
+        "token": "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f"
+      },
+      "verified": true,
+      "notes": "WBTC bridged to Arbitrum One via the standard L1 ERC20 gateway. Escrow: https://etherscan.io/address/0xa3A7B6F88361F48403514059F1F16C8E78d60EeC — verified BACKED at seed time."
+    },
+    {
+      "id": "arbitrum-link-gateway",
+      "bridge": "Arbitrum (canonical bridge)",
+      "asset": "LINK",
+      "lock": {
+        "chain": "ethereum",
+        "escrow": "0xa3A7B6F88361F48403514059F1F16C8E78d60EeC",
+        "token": "0x514910771AF9Ca656af840dff83E8264EcF986CA"
+      },
+      "mint": {
+        "chain": "arbitrum",
+        "token": "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"
+      },
+      "verified": true,
+      "notes": "LINK bridged to Arbitrum One via the standard L1 ERC20 gateway. Escrow: https://etherscan.io/address/0xa3A7B6F88361F48403514059F1F16C8E78d60EeC — verified BACKED at seed time."
     }
   ]
 }

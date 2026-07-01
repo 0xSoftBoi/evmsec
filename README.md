@@ -234,10 +234,16 @@ non-zero when undercollateralized**, so it drops straight into CI or a cron:
 */5 * * * * evmsec solvency --all || alert "bridge backing breached"
 ```
 
-Define your own verified routes in `bridges.json` (or point `EVMSEC_BRIDGES` at
-your file). ⚠️ The bundled entries are _illustrative_ — verify every address
-against the bridge's own source before trusting a number. A security tool fed
-the wrong escrow lies confidently.
+**`bridges.json` ships with real, live-verified routes** so `solvency --all`
+works out of the box — currently USDC / DAI / WBTC on **Polygon PoS** and DAI /
+WBTC / LINK on **Arbitrum**, each checked to be `BACKED` (locked ≥ minted, ~100%)
+before inclusion, with its escrow linked in `notes`. Add your own (or point
+`EVMSEC_BRIDGES` at a private file); `npm run validate:registry` enforces shape,
+checksummed addresses, and a cited source. ⚠️ Escrows and mappings **change** —
+re-verify against each bridge's own contracts before relying on a number. A
+security tool fed the wrong escrow lies confidently (which is why USDT-on-Polygon,
+where the standard predicate isn't the real escrow, was tested and left out rather
+than shipped as a false alarm).
 
 **Multi-asset / multi-escrow routes.** A route's `lock` may be an **array of
 legs** (each `{ chain, escrow, token }`). The legs are summed — normalized to 18
