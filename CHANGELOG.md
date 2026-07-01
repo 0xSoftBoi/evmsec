@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Unattended breach alerting + trend history.** The scheduled
+  [`bridge-status` workflow](.github/workflows/bridge-status.yml) now **opens a GitHub
+  issue** the moment a route goes undercollateralized (labelled `bridge-breach`, de-duped
+  to one open issue) and **closes it on recovery** — a bridge-watch that pages you, with
+  no external monitoring service. Only a genuine breach opens an issue; an unreadable RPC
+  (`degraded`) never does, so a flaky endpoint can't cry wolf. `gen:status` also appends a
+  compact rollup to `STATUS.history.jsonl` each run (capped to the last 720 entries), so
+  the feed carries a trend, not just a snapshot.
+
 - **USD valuation of bridge backing (on-chain Chainlink).** `solvency` now prices
   each route's locked/minted collateral in dollars — `$1.18B locked · $1.17B minted`,
   and the **deficit in USD** on a breach — by reading canonical Chainlink aggregators

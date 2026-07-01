@@ -1,8 +1,10 @@
 name: bridge-status
 
 # Keep the live "is every bridge in the registry backed?" artifacts fresh:
-# STATUS.md (human page), STATUS.json (machine feed), badge.json (shields.io badge).
-# Runs on a schedule and on demand; commits them back only when they changed.
+# STATUS.md (human page), STATUS.json (machine feed), badge.json (shields.io badge),
+# STATUS.history.jsonl (trend). Runs on a schedule and on demand; commits them back
+# only when they changed. On a real breach it opens a GitHub issue, and closes it on
+# recovery — an unattended bridge-watch that pages you when backing breaks.
 #
 # Optional secrets for stable numbers (public RPCs are rate-limited):
 #   ETHEREUM_RPC_URL, POLYGON_RPC_URL, ARBITRUM_RPC_URL, OPTIMISM_RPC_URL, BASE_RPC_URL
@@ -13,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: bridge-status
@@ -40,10 +43,70 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add STATUS.md STATUS.json badge.json
+          git add STATUS.md STATUS.json badge.json STATUS.history.jsonl
           if git diff --cached --quiet; then
             echo "no change"
           else
             git commit -m "chore: update bridge status [skip ci]"
             git push
           fi
+
+      # Page on a real breach; stand down on recovery. Only actual
+      # undercollateralization (not an unreadable RPC) opens an issue, so a flaky
+      # endpoint can't cry wolf. De-duped via the `bridge-breach` label: one open
+      # issue at a time, closed automatically when every route is backed again.
+      - name: Alert on breach / recover
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const feed = JSON.parse(fs.readFileSync("STATUS.json", "utf8"));
+            const LABEL = "bridge-breach";
+            const breached = feed.routes.filter((r) => r.verdict === "UNDERCOLLATERALIZED");
+            const isBreach = feed.overall === "undercollateralized" && breached.length > 0;
+
+            const { owner, repo } = context.repo;
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: "open", labels: LABEL, per_page: 100,
+            });
+
+            if (isBreach) {
+              if (open.length) {
+                core.info(`breach already tracked in #${open[0].number}`);
+                return;
+              }
+              // Ensure the label exists (ignore "already exists").
+              try {
+                await github.rest.issues.createLabel({ owner, repo, name: LABEL, color: "b60205",
+                  description: "A registry bridge route is undercollateralized" });
+              } catch (e) { core.info(`label: ${e.message}`); }
+              const rows = breached
+                .map((r) => `| ${r.bridge} | ${r.asset} | ${r.lockChain} → ${r.mintChain} | ${r.ratioPct ?? "?"}% |`)
+                .join("\n");
+              const body = [
+                `🔴 **${breached.length} bridge route(s) undercollateralized** as of ${feed.generatedAt}.`,
+                ``,
+                `| Bridge | Asset | Route | Backing |`,
+                `| ------ | ----- | ----- | ------: |`,
+                rows,
+                ``,
+                `See [\`STATUS.md\`](../blob/master/STATUS.md) for the full board. This issue was`,
+                `opened automatically by the \`bridge-status\` workflow and will close on recovery.`,
+                ``,
+                `> A heuristic over on-chain balances, not a proof. Verify against each bridge's`,
+                `> own contracts before acting — an escrow that moved reads as a false breach.`,
+              ].join("\n");
+              const issue = await github.rest.issues.create({
+                owner, repo, labels: [LABEL],
+                title: `🔴 Bridge undercollateralized (${breached.length} route${breached.length > 1 ? "s" : ""})`,
+                body,
+              });
+              core.warning(`opened breach issue #${issue.data.number}`);
+            } else if (feed.overall === "backed" && open.length) {
+              for (const iss of open) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: iss.number,
+                  body: `✅ All routes backed again as of ${feed.generatedAt}. Closing.` });
+                await github.rest.issues.update({ owner, repo, issue_number: iss.number, state: "closed" });
+                core.info(`closed #${iss.number} on recovery`);
+              }
+            }

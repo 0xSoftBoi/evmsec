@@ -14,7 +14,7 @@
  * Point <CHAIN>_RPC_URL env vars at reliable endpoints for stable numbers.
  */
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 
 const raw = execFileSync("node", ["dist/index.js", "solvency", "--all", "--json"], {
   encoding: "utf8",
@@ -41,7 +41,11 @@ const usd = (n) => {
 const backed = routes.filter((r) => r.verdict === "BACKED").length;
 const breached = routes.filter((r) => r.verdict === "UNDERCOLLATERALIZED").length;
 const errored = routes.filter((r) => r.verdict === "ERROR").length;
-const overall = breached ? "🔴 A bridge is undercollateralized" : errored ? "⚠️ Some routes could not be read" : "✅ All routes backed";
+const overall = breached
+  ? "🔴 A bridge is undercollateralized"
+  : errored
+    ? "⚠️ Some routes could not be read"
+    : "✅ All routes backed";
 
 // Total value locked across every priced route — the headline dollar figure.
 const totalLockedUsd = routes.reduce((s, r) => s + (typeof r.lockedUsd === "number" ? r.lockedUsd : 0), 0);
@@ -116,4 +120,23 @@ const badge = {
 };
 writeFileSync("badge.json", JSON.stringify(badge) + "\n");
 
-console.error(`wrote STATUS.md, STATUS.json, badge.json — ${backed}/${routes.length} backed${breached ? `, ${breached} breached` : ""}`);
+// Append a compact rollup to the history feed — a trend, not just a snapshot.
+// Capped so the file stays bounded (~6 months at the 6-hourly cadence).
+const HISTORY = "STATUS.history.jsonl";
+const HISTORY_MAX = 720;
+const entry = JSON.stringify({
+  at: generatedAt,
+  overall: feed.overall,
+  backed,
+  breached,
+  errored,
+  total: routes.length,
+  totalLockedUsd: feed.totalLockedUsd,
+});
+const prior = existsSync(HISTORY) ? readFileSync(HISTORY, "utf8").split("\n").filter(Boolean) : [];
+const kept = [...prior, entry].slice(-HISTORY_MAX);
+writeFileSync(HISTORY, kept.join("\n") + "\n");
+
+console.error(
+  `wrote STATUS.md, STATUS.json, badge.json, STATUS.history.jsonl — ${backed}/${routes.length} backed${breached ? `, ${breached} breached` : ""}`,
+);

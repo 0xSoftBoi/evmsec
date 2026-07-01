@@ -4,4 +4,5 @@ coverage/
 package-lock.json
 STATUS.md
 STATUS.json
+STATUS.history.jsonl
 badge.json
