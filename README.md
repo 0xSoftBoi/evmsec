@@ -530,13 +530,19 @@ evmsec check is working from bytecode alone.
 npm run evmsec -- verification-status 0xContract --chain ethereum [--json]
 ```
 
-Queries Sourcify v2 (`GET /v2/contract/{chainId}/{address}`) and classifies the
-result: a full **exact match**, a **partial match** (bytecode matches but the
-metadata hash differs — functionally verified), or **unverified**. **Exit code is
-non-zero when no verified source is found.** A provider that's unreachable reads
-`unknown` (a network condition, not a verdict) and does _not_ fail CI. Override
-the server with `--sourcify <url>`; the HTTP timeout is `EVMSEC_HTTP_TIMEOUT_MS`.
-Pure classification (`verification-core.ts`) is unit-tested offline.
+Consults **two providers** so a contract verified on only one isn't falsely
+flagged. **Sourcify** v2 (`GET /v2/contract/{chainId}/{address}`) first — it
+distinguishes a full **exact match** from a **partial match** (bytecode matches
+but the metadata hash differs — functionally verified). If Sourcify has no match
+and `ETHERSCAN_API_KEY` is set, it falls back to **Etherscan**'s multichain v2 API
+(`getsourcecode`); a contract verified there reads `verified` (provenance is shown
+as `verified by: sourcify | etherscan`). Only when a reachable provider says "not
+verified" and none says it is does the result read **unverified**. **Exit code is
+non-zero when no verified source is found.** With both providers unreachable it
+reads `unknown` (a network condition, not a verdict) and does _not_ fail CI.
+Override Sourcify with `--sourcify <url>`; the HTTP timeout is
+`EVMSEC_HTTP_TIMEOUT_MS`. Pure classification (`verification-core.ts`) is
+unit-tested offline across every provider combination.
 
 ### `settlement` — did the cross-chain intent actually get filled?
 
@@ -779,7 +785,7 @@ src/
   oracle-core.ts             pure price-feed hygiene (staleness / zero / sequencer → verdict)
   compiler-core.ts           pure solc-version extraction (CBOR) + bug-list matching
   data/solc-bugs.ts          bundled solc bug lists (derived; npm run gen:solc-bugs)
-  verification-core.ts       pure source-verification verdict (Sourcify match → verdict)
+  verification-core.ts       pure source-verification verdict (Sourcify + Etherscan → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification
   freeze-core.ts             pure blacklist/freeze capability + authority classification
@@ -807,7 +813,7 @@ src/
     freeze-authority.ts      who can freeze/seize an individual holder? (blacklist)
     oracle-hygiene.ts        is this price feed fresh & safe to read now?
     compiler-bugs.ts         built with a solc version that has a known bug?
-    verification-status.ts   is this contract's source verified? (Sourcify)
+    verification-status.ts   is this contract's source verified? (Sourcify + Etherscan)
     settlement.ts            cross-chain intent fill verification (erc7683/across/cow)
     message-proof.ts         cross-chain message attestation (Wormhole/Hyperlane)
     pq-readiness.ts          post-quantum readiness of a verifier (Shor-breakable?)
