@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`bridges.json` seeded with real, live-verified routes** — so the flagship
+  `solvency --all` actually does its headline job out of the box instead of
+  shipping illustrative placeholders. Six routes across two bridges and two
+  destination chains: USDC / DAI / WBTC on **Polygon PoS** (the ERC20 predicate
+  escrow) and DAI (MakerDAO escrow) / WBTC / LINK on **Arbitrum** (the canonical
+  L1 gateway). Every route was checked live to be `BACKED` (locked ≥ minted,
+  ~100%) before inclusion, each with its escrow linked in `notes`; the registry
+  validator enforces checksummed addresses + a cited source. Routes that _didn't_
+  verify were deliberately left out rather than shipped as false alarms — e.g.
+  USDT-on-Polygon reads 0.9% against the standard predicate (it isn't the real
+  escrow), and single-escrow WETH routes are multi-path. Re-verify before relying
+  on any number: escrows change.
+
 - **Distribution — Docker image + npm release automation.** A multi-stage
   `Dockerfile` (build → slim `node:22-alpine` runtime, non-root, ~300 MB) ships
   both bins; `docker run … ghcr.io/0xsoftboi/evmsec audit 0x…` needs no Node.
