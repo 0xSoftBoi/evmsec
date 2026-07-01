@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Distribution — Docker image + npm release automation.** A multi-stage
+  `Dockerfile` (build → slim `node:22-alpine` runtime, non-root, ~300 MB) ships
+  both bins; `docker run … ghcr.io/0xsoftboi/evmsec audit 0x…` needs no Node.
+  Verified building and running end-to-end (a live `admin-power` check from inside
+  the container). A `release` workflow publishes to npm **with provenance** and
+  pushes the image to GHCR on a `v*` tag (`npm version patch && git push
+--follow-tags`), gated on the full `npm run check`. `publishConfig.access` set
+  for a clean `npm publish`; the published build drops source/declaration maps
+  (225 → 115 files, ~106 kB packed). README documents `npx evmsec` / Docker /
+  from-source install.
+
 - **`deps` command — audit your on-chain dependencies.** Reframes the audit from
   "a contract" to "every external contract your protocol trusts" (the USDC you
   hold, the Chainlink feed you price off, the bridge you route through — your

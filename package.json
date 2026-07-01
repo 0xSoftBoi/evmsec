@@ -13,6 +13,9 @@
     "url": "https://github.com/0xSoftBoi/evmsec/issues"
   },
   "homepage": "https://github.com/0xSoftBoi/evmsec#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "evmsec": "dist/index.js",
     "evmsec-mcp": "dist/mcp.js"
