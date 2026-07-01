@@ -345,7 +345,18 @@ document.addEventListener("submit", function (e) {
     });
 });
 
+function pollStatus() {
+  getJSON("/api/status").then(function (s) {
+    if (s && s.generatedAt) {
+      S.status = s;
+      overallPill();
+      if (currentView().name === "board") render();
+    }
+  });
+}
+
 function connectStream() {
+  var failures = 0;
   var es = new EventSource("/api/stream");
   es.addEventListener("status", function (ev) {
     S.status = JSON.parse(ev.data);
@@ -357,7 +368,16 @@ function connectStream() {
     S.alerts.unshift(JSON.parse(ev.data));
     if (currentView().name === "alerts") render();
   });
+  es.onerror = function () {
+    failures++;
+    if (failures >= 3) {
+      // No SSE on this host (e.g. a serverless deployment) — poll instead.
+      es.close();
+      setInterval(pollStatus, 60000);
+    }
+  };
   es.onopen = function () { // re-hydrate after any reconnect so the board can't go stale
+    failures = 0;
     Promise.all([getJSON("/api/status"), getJSON("/api/alerts")]).then(function (r) {
       if (r[0] && r[0].generatedAt) S.status = r[0];
       S.alerts = r[1] || [];

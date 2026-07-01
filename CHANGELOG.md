@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Vercel deployment for the Watchtower (serverless, read-only).** `api/` +
+  `vercel.json` adapt the dashboard to a serverless platform: `/api/status` computes
+  the sweep on demand with CDN caching (`s-maxage=300, stale-while-revalidate=3600`),
+  route detail serves one fresh observation, exposure is fully functional, and
+  watches return `501 read-only` (they need persistent state). The dashboard now
+  falls back from SSE to 60-second polling when no stream exists, so the same UI
+  serves both deployments. Zero-config: import the repo at vercel.com/new (function
+  `maxDuration: 60`; `includeFiles` carries `dist/` + `bridges.json`).
+
 - **`serve` — the Watchtower, an embedded web application.** `evmsec serve` boots a
   live dashboard + REST/SSE API + background monitor over the same solvency engine:
   a status board with per-route backing, USD value, and trend sparklines (live over

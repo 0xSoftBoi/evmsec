@@ -414,6 +414,22 @@ by default; `--host 0.0.0.0` for LAN/container exposure (writes then require
 existing image runs it (`docker run -p 8787:8787 -v data:/data ghcr.io/0xsoftboi/evmsec
 serve --host 0.0.0.0 --data-dir /data`).
 
+**Vercel — serverless read-only** (ships now, `api/` + `vercel.json`): the same
+dashboard and API on a serverless platform, adapted to its constraints. There is
+no resident process, so the monitor loop, SSE, and file persistence don't apply;
+instead `/api/status` computes the sweep **on demand** and the CDN caches it
+(`s-maxage=300, stale-while-revalidate=3600`) — most visitors get an instant
+cached board and the sweep only really runs when the cache is stale. The
+dashboard detects the missing SSE stream and falls back to polling. Route detail
+serves one fresh observation (no stored history); watches return
+`501 read-only`; exposure works fully (it's stateless) and joins verdicts from
+the deployment's own cached `/api/status`. Import the repo at
+[vercel.com/new](https://vercel.com/new) or `vercel deploy` — `vercel.json` is
+zero-config (`buildCommand`, function `maxDuration: 60`, `includeFiles` for
+`dist/` + `bridges.json`, rewrites for `/` and history). Alerting stays with the
+GitHub-Actions bridge-status workflow — a serverless request cycle has no
+sweep-to-sweep memory, so it cannot own transitions.
+
 **Hosted**:
 
 - Containers from the existing multi-stage `Dockerfile`; API and workers are the
