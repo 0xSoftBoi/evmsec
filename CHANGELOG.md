@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Broader route & chain coverage.** Added **Linea** and **Scroll** to the chain
+  config (so `audit` and ad-hoc `solvency` reach them) and two new live-verified routes
+  to the registry: **base-usdbc** (USDC→Base USDbC via the L1StandardBridge, ~103%) and
+  **scroll-usdc** (USDC→Scroll via Scroll's dedicated L1 USDC Gateway, ~109% — a
+  single-asset gateway, so the surplus is real backing). Registry is now **11 routes
+  across 5 chains**. Verify-first held the line: Arbitrum USDC.e (reads 0% against the
+  standard gateway — it uses a custom one), Optimism USDC/USDT (unexplained 13–18%
+  excess), and Linea USDC (canonical bridge deprecated for native USDC) were all tested
+  and left out. `normalizeAsset` gained an alias fold so bridged labels like `USDbC`
+  price off the canonical USDC feed.
+
 - **Unattended breach alerting + trend history.** The scheduled
   [`bridge-status` workflow](.github/workflows/bridge-status.yml) now **opens a GitHub
   issue** the moment a route goes undercollateralized (labelled `bridge-breach`, de-duped

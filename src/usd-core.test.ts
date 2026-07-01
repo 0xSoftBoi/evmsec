@@ -2,12 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeAsset, priceRouteFor, priceFromHops, usdValue, fmtUsd, PRICE_FEEDS } from "./usd-core.js";
 
-test("normalizeAsset strips bridged suffixes and upper-cases", () => {
+test("normalizeAsset strips bridged suffixes, upper-cases, and folds aliases", () => {
   assert.equal(normalizeAsset("USDC.e"), "USDC");
   assert.equal(normalizeAsset("usdc.b"), "USDC");
+  assert.equal(normalizeAsset("USDbC"), "USDC", "Base bridged USDC prices as USDC");
   assert.equal(normalizeAsset("DAI"), "DAI");
   assert.equal(normalizeAsset("cbETH"), "CBETH");
   assert.equal(normalizeAsset("  wbtc  "), "WBTC");
+});
+
+test("aliased assets resolve to a price route", () => {
+  assert.ok(priceRouteFor("USDbC"), "USDbC should price via the USDC feed");
+  assert.equal(priceRouteFor("USDbC"), PRICE_FEEDS.USDC);
 });
 
 test("priceRouteFor resolves the registry via the normalized key", () => {

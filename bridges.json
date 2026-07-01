@@ -144,6 +144,38 @@
       },
       "verified": true,
       "notes": "cbETH bridged to Base via the Base L1StandardBridge. Escrow: https://etherscan.io/address/0x3154Cf16ccdb4C6d922629664174b904d80F2C35 — verified BACKED at seed time."
+    },
+    {
+      "id": "base-usdbc",
+      "bridge": "Base (canonical bridge)",
+      "asset": "USDbC",
+      "lock": {
+        "chain": "ethereum",
+        "escrow": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
+        "token": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      },
+      "mint": {
+        "chain": "base",
+        "token": "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA"
+      },
+      "verified": true,
+      "notes": "USDC bridged to Base as USDbC via the Base L1StandardBridge. Escrow: https://etherscan.io/address/0x3154Cf16ccdb4C6d922629664174b904d80F2C35 — verified BACKED at seed time (~103%; mild over-collateralization as USDbC is migrated toward native USDC)."
+    },
+    {
+      "id": "scroll-usdc",
+      "bridge": "Scroll (canonical bridge)",
+      "asset": "USDC.e",
+      "lock": {
+        "chain": "ethereum",
+        "escrow": "0xf1AF3b23DE0A5Ca3CAb7261cb0061C0D779A5c7B",
+        "token": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      },
+      "mint": {
+        "chain": "scroll",
+        "token": "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4"
+      },
+      "verified": true,
+      "notes": "USDC bridged to Scroll via Scroll's dedicated L1 USDC Gateway. Escrow: https://etherscan.io/address/0xf1AF3b23DE0A5Ca3CAb7261cb0061C0D779A5c7B — verified BACKED at seed time (~109%; the USDC-dedicated gateway is over-collateralized, not shared, so the surplus is real backing)."
     }
   ]
 }
