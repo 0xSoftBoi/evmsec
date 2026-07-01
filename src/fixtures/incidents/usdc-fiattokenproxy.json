@@ -9,6 +9,7 @@
     "admin-power": "critical",
     "upgradeability": "critical",
     "pause-guardian": "critical",
+    "freeze-authority": "critical",
     "compiler-bugs": "warning"
   },
   "actual": {
@@ -16,7 +17,8 @@
     "upgradeability": "critical",
     "admin-power": "critical",
     "mint-authority": "warning",
-    "pause-guardian": "critical"
+    "pause-guardian": "critical",
+    "freeze-authority": "critical"
   },
   "recordings": [
     {
@@ -77,6 +79,14 @@
     },
     {
       "key": "{\"method\":\"getCode\",\"address\":\"0x4914f61d25e5C567143774B76EdbF4D5109a8566\",\"blockTag\":\"latest\"}",
+      "result": "0x"
+    },
+    {
+      "key": "{\"method\":\"call\",\"transaction\":{\"to\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"data\":\"0xbd102430\"},\"blockTag\":\"latest\"}",
+      "result": "0x0000000000000000000000000a06be16275b95a7d2567fbdae118b36c7da78f9"
+    },
+    {
+      "key": "{\"method\":\"getCode\",\"address\":\"0x0A06BE16275B95a7d2567fBdAE118b36C7DA78F9\",\"blockTag\":\"latest\"}",
       "result": "0x"
     }
   ]

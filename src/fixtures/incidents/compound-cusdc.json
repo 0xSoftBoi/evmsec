@@ -14,7 +14,8 @@
     "upgradeability": "ok",
     "admin-power": "warning",
     "mint-authority": "warning",
-    "pause-guardian": "ok"
+    "pause-guardian": "ok",
+    "freeze-authority": "ok"
   },
   "recordings": [
     {

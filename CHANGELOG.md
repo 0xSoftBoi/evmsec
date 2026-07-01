@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`freeze-authority <token>` command + check**: the targeted-censorship sibling
+  of `pause-guardian` — can an _individual_ holder be frozen (or their balance
+  seized), and who holds that power? Detects the two dominant on-chain patterns:
+  **FiatToken** (USDC-class) `blacklist(addr)` gated by a `blacklister()` role, and
+  **Tether** (USDT) owner-gated `addBlackList(addr)` plus `destroyBlackFunds(addr)`
+  (which _burns_ a frozen balance — a seize, flagged distinctly). Resolves the
+  actual authority (`blacklister()` or `owner()`), classifies it, and exits
+  non-zero when a single EOA can freeze/seize any holder. Part of `audit`. Pure
+  logic (`freeze-core.ts`) unit-tested; validated live — USDC's blacklister is a
+  single EOA (`freeze-authority: critical`), USDT's owner can freeze+seize
+  (`warning`). Both pinned by the incident fixtures.
 - **Incident fixtures — verdicts regression-tested against real mainnet contracts,
   offline** (`src/incident-fixtures.test.ts`, `src/testing/replay-provider.ts`,
   `src/fixtures/incidents/`, `scripts/capture-fixtures.ts`): a record/replay

@@ -36,6 +36,7 @@ const SPECS: Spec[] = [
       "admin-power": "critical",
       upgradeability: "critical",
       "pause-guardian": "critical",
+      "freeze-authority": "critical",
       "compiler-bugs": "warning",
     },
   },
@@ -51,11 +52,11 @@ const SPECS: Spec[] = [
   {
     name: "usdt-tether",
     description:
-      "Tether USD (USDT) — the largest stablecoin, an Ownable TetherToken. Its owner is an unrecognized controller contract (not a Gnosis Safe or timelock), so admin-power flags it for inspection rather than passing it.",
+      "Tether USD (USDT) — the largest stablecoin, an Ownable TetherToken. Its owner is an unrecognized controller contract (not a Gnosis Safe or timelock), so admin-power flags it for inspection. It also exposes the Tether blacklist (addBlackList + destroyBlackFunds): the owner can freeze AND burn any holder's balance, so freeze-authority flags the owner contract for inspection.",
     source: "https://etherscan.io/address/0xdAC17F958D2ee523a2206206994597C13D831ec7#code",
     chain: "ethereum",
     address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-    expect: { "admin-power": "warning", upgradeability: "ok" },
+    expect: { "admin-power": "warning", upgradeability: "ok", "freeze-authority": "warning" },
   },
   {
     name: "wbtc",

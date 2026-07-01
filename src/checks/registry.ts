@@ -5,6 +5,7 @@ import { upgradeabilityCheck } from "./upgradeability.js";
 import { authorityCheck } from "./authority.js";
 import { mintAuthorityCheck } from "./mint.js";
 import { pauseGuardianCheck } from "./pause.js";
+import { freezeAuthorityCheck } from "./freeze.js";
 
 /**
  * The contract-audit family, in report order. `evmsec audit` runs all of them;
@@ -21,4 +22,5 @@ export const CONTRACT_CHECKS: Check[] = [
   authorityCheck,
   mintAuthorityCheck,
   pauseGuardianCheck,
+  freezeAuthorityCheck,
 ];

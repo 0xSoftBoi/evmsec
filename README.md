@@ -45,8 +45,8 @@ npm run evmsec -- <command> [args]
 The fastest way in: point `audit` at any contract. It fetches the bytecode
 **once**, runs every check that applies to a generic contract — source
 verification, compiler-bug exposure, upgradeability, admin power, mint authority,
-pause guardian — and prints one report card, severity-ranked, with an overall
-verdict.
+pause guardian, freeze authority — and prints one report card, severity-ranked,
+with an overall verdict.
 
 ```bash
 npm run evmsec -- audit 0xContract --chain ethereum
@@ -61,6 +61,7 @@ npm run evmsec -- audit 0xContract --chain ethereum
   ✗ CRITICAL   admin-power
   ⚠ WARNING    mint-authority
   ✗ CRITICAL   pause-guardian
+  ✗ CRITICAL   freeze-authority
   ────────────────────────────────────────
   OVERALL: ✗ at least one critical finding — blocking.
 ```
@@ -95,10 +96,17 @@ _Reports a real on-chain property:_
   custody Circle uses — an EOA can be backed by MPC/HSM/multi-party signing that
   evmsec **cannot see**. The critical rating is about what's _enforced on-chain_,
   not a claim that one person holds a hot key. (See [Limitations](#limitations).)
+- **USDC** also → `freeze-authority: ✗ CRITICAL` and `pause-guardian: ✗ CRITICAL`.
+  Its `blacklister()` is a single EOA that can freeze any individual holder, and
+  its `pauser()` is a single EOA that can freeze _all_ transfers — both correctly
+  attributed to the actual role (not `owner()`). Real, live censorship surface on
+  the largest regulated stablecoin.
 - **USDT** and **WBTC** → `admin-power: ⚠ WARNING`. Their owners are contracts that
   are **not** a recognized Gnosis Safe or timelock, so the tool flags them for
   inspection rather than rubber-stamping "it's a contract" — it doesn't claim to
-  know what those controllers are.
+  know what those controllers are. (USDT also → `freeze-authority: ⚠ WARNING`: the
+  owner can `addBlackList` **and** `destroyBlackFunds` — freeze _and burn_ any
+  holder's balance.)
 
 _Doesn't cry wolf on reasonable setups:_
 
@@ -307,6 +315,30 @@ the guardian. It resolves the _actual_ pause authority rather than assuming
 currently-paused token is flagged prominently regardless of who holds the key.
 Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is unit-tested. (Off-chain
 key custody still applies — see [Limitations](#limitations).)
+
+### `freeze-authority` — can an individual holder be frozen or seized?
+
+`pause-guardian` covers freezing _everyone at once_. This is the targeted
+censorship sibling: **can a specific holder be frozen — or their balance burned —
+and who holds that power?** Two dominant on-chain patterns:
+
+- **FiatToken (USDC-class)** — a `blacklister` role can `blacklist(addr)`. The
+  check resolves `blacklister()` and classifies it.
+- **Tether (USDT)** — an owner-gated `addBlackList(addr)`, plus
+  `destroyBlackFunds(addr)` which **burns** a blacklisted balance (a seize, not
+  just a freeze). The check resolves `owner()` and flags whether seizure is
+  possible.
+
+```bash
+npm run evmsec -- freeze-authority 0xToken --chain ethereum [--json]
+```
+
+**Exit code is non-zero when a single EOA can freeze/seize any holder.** On USDC
+this reports the `blacklister()` — a single EOA that can freeze any account; on
+USDT it reports the owner contract and notes that balances can be seized. Tokens
+without a recognized blacklist pattern read `ok`. Same on-chain-authority caveat
+as the other keys (see [Limitations](#limitations)); logic in `freeze-core.ts` is
+unit-tested.
 
 ### `oracle-hygiene` — is this price feed fresh and safe to read right now?
 
@@ -630,13 +662,14 @@ src/
   verification-core.ts       pure source-verification verdict (Sourcify match → verdict)
   mint-authority-core.ts     pure mint/auth capability classification (bytecode → verdict)
   pause-guardian-core.ts     pure pause capability + guardian classification
+  freeze-core.ts             pure blacklist/freeze capability + authority classification
   *-core.test.ts             unit tests for the pure cores (no network)
   check.ts                   the check framework: Finding/Report types + human/JSON/SARIF renderers
   checks/                    one assessor per contract-audit check (over the pure cores)
     run.ts                   shared runner: parse → fetch bytecode once → run checks → render
     registry.ts              the contract-audit family (what `audit` runs)
     onchain.ts               shared on-chain reads (proxy/authority/Safe/timelock probes)
-    {upgradeability,authority,compiler,verification,mint,pause}.ts
+    {upgradeability,authority,compiler,verification,mint,pause,freeze}.ts
   testing/replay-provider.ts record/replay provider (test-only; excluded from the build)
   fixtures/incidents/*.json  pinned real-contract reads + expected verdicts (offline replay)
   incident-fixtures.test.ts  replays the fixtures through the real assessors, no network
@@ -648,6 +681,7 @@ src/
     admin-power.ts           what kind of authority controls it (EOA/Safe/timelock)?
     mint-authority.ts        who can inflate the wrapped supply?
     pause-guardian.ts        who can freeze transfers?
+    freeze-authority.ts      who can freeze/seize an individual holder? (blacklist)
     oracle-hygiene.ts        is this price feed fresh & safe to read now?
     compiler-bugs.ts         built with a solc version that has a known bug?
     verification-status.ts   is this contract's source verified? (Sourcify)
