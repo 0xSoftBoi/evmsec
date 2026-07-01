@@ -118,6 +118,15 @@ The pure cores are unit-tested offline; the `getLogs`-bound and live-call paths
 are not covered in CI (the sandboxed environment restricts `eth_getLogs` and some
 public RPCs are flaky). To pay down:
 
+- ✅ **Incident fixtures** — *shipped for the contract-audit family.* A
+  record/replay harness (`src/testing/replay-provider.ts`,
+  `scripts/capture-fixtures.ts`) captures the real on-chain reads for named
+  mainnet contracts and replays them offline through the real assessors
+  (`src/incident-fixtures.test.ts`), so end-to-end verdicts — not just the pure
+  cores — are regression-tested with no network. *Still open:* extend the fixture
+  set (more incidents, low-threshold Safes, oracle staleness) and cover the
+  role-enumeration `getLogs` path (currently only the Ownable authority paths are
+  pinned).
 - An **opt-in network test suite** (gated behind an env flag) for the
   log-scanning features: `solvency --since` bisection, settlement fill
   auto-discovery, `settlement diagnose`, and role-holder enumeration.

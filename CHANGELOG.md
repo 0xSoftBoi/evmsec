@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Incident fixtures — verdicts regression-tested against real mainnet contracts,
+  offline** (`src/incident-fixtures.test.ts`, `src/testing/replay-provider.ts`,
+  `src/fixtures/incidents/`, `scripts/capture-fixtures.ts`): a record/replay
+  harness captures the exact on-chain reads a check makes (at the ethers
+  `_perform` choke point) against a named contract, commits them, and replays them
+  through the **real** assessors with no network. Pinned so far: USDC (proxy admin
+  is a single EOA → `admin-power` critical), USDT / WBTC (owner is an unrecognized
+  controller → warning, not a rubber-stamp), Compound cUSDC (admin via a
+  non-standard getter → reported unresolved, a documented blind spot), and DAI
+  (not a proxy → no false upgradeability alarm). A drifting heuristic now fails
+  CI. Regenerate with `npm run capture:fixtures`.
 - **Check framework + SARIF/JSON for every contract check** (`src/check.ts`,
   `src/checks/`): the six contract-audit checks are now each a `Check` over a
   shared `CheckContext` (bytecode fetched **once** and reused across checks),
@@ -157,6 +168,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`admin-power` no longer passes an unresolved controller**: when no EIP-1967
+  admin and no `owner()` can be resolved, the verdict now reads `⚠ WARNING`
+  ("control may live in a custom scheme; inspect") instead of a clean `ok` — a
+  security tool saying "I couldn't tell who controls this" shouldn't look like a
+  pass. Renounced (zero address) still reads `ok`. Pinned by the DAI / cUSDC
+  incident fixtures.
 - **Sharper Safe-threshold heuristic**: `admin-power` no longer waves through any
   m-of-n multisig with m ≥ 2. A threshold below 3, or one that isn't a majority of
   the owners, now reads `⚠ WARNING` (low threshold) — so a 2-of-5 Safe, the exact

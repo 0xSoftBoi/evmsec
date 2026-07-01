@@ -45,15 +45,20 @@ export const authorityCheck: Check = {
     if (safe) evidence.multisig = `${safe.threshold}-of-${safe.owners}`;
     if (delaySec !== null) evidence["timelock delay"] = `${delaySec}s`;
 
-    const severity: Severity = verdict.fail ? "critical" : verdict.risk === "elevated" ? "warning" : "ok";
+    // "unknown" means we could not resolve a controller (no EIP-1967 admin, no
+    // owner()) — that's a review item, not a clean pass: a contract may still be
+    // controlled through a non-standard admin (Compound-style `admin()`) or
+    // AccessControl roles that this check doesn't resolve. Renounced (zero) stays ok.
+    const severity: Severity = verdict.fail
+      ? "critical"
+      : verdict.risk === "elevated" || verdict.kind === "unknown"
+        ? "warning"
+        : "ok";
 
-    return report({
-      id: this.id,
-      title: this.title,
-      severity,
-      summary: verdict.summary,
-      evidence,
-      notes: ["confirm the full privileged-role set against source — this resolves one controlling authority."],
-    });
+    const notes = ["confirm the full privileged-role set against source — this resolves one controlling authority."];
+    if (verdict.kind === "unknown")
+      notes.push("no EIP-1967 admin or owner() found — control may live in a custom scheme; inspect directly.");
+
+    return report({ id: this.id, title: this.title, severity, summary: verdict.summary, evidence, notes });
   },
 };

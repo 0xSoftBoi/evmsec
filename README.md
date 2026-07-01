@@ -78,19 +78,37 @@ means every check gets machine output for free:
 excluded — they target a feed / route / tx-pair / VAA, not a generic contract.
 It's a heuristic aggregate of on-chain reads, not a substitute for an audit.
 
-#### What it catches
+#### What it catches (regression-tested against real contracts)
 
-These are real, on-chain-verifiable findings on live mainnet contracts — not
-contrived:
+The verdicts below aren't marketing — they're **pinned in a test suite**. Each
+one records the exact on-chain reads against a real mainnet contract
+(`scripts/capture-fixtures.ts`) and replays them offline through the real
+assessors (`src/incident-fixtures.test.ts`), so a heuristic can't drift without a
+test going red. Regenerate with `npm run capture:fixtures`.
 
-- **`audit 0xA0b8…eB48` (USDC)** flags `admin-power: ✗ CRITICAL` — USDC's
-  FiatTokenProxy upgrade admin (`0x807a…95d2`) is a **single externally-owned
-  key**, not a multisig. (Verify: that address has no code.) A compromise of one
-  key can replace the implementation behind one of the largest tokens on Ethereum.
-- A **2-of-5 Safe** — the exact configuration of the Harmony Horizon bridge, drained
-  for ~$100M in 2022 when two signer keys were compromised — now reads
-  `⚠ WARNING` (a low threshold, not a passing "info"), where a naive m-of-n ≥ 2
-  check would have waved it through.
+_Flags real single-key / unresolved control:_
+
+- **USDC** (`0xA0b8…eB48`) → `admin-power: ✗ CRITICAL`. Its FiatTokenProxy upgrade
+  admin (`0x807a…95d2`) is a **single externally-owned key**, not a multisig
+  (verify: that address has no code) — one key can replace the implementation
+  behind one of the largest tokens on Ethereum.
+- **USDT** and **WBTC** → `admin-power: ⚠ WARNING`. Their owners are custom
+  controller contracts that are **not** a recognized Gnosis Safe or timelock, so
+  the tool flags them for inspection instead of rubber-stamping "it's a contract."
+- **cUSDC** → `admin-power: ⚠ WARNING`. Compound gates admin through a
+  non-standard `admin()` getter evmsec doesn't resolve — so it reports the
+  controller as **unresolved** rather than falsely passing. (A documented blind
+  spot, pinned as one.)
+
+_Doesn't cry wolf:_
+
+- **DAI** → `upgradeability: ✓ ok` — correctly identified as **not** a proxy (no
+  false "upgradeable" alarm).
+
+_Sharper than a naive check:_ a **2-of-5 Safe** — the configuration of the Harmony
+Horizon bridge, drained for ~$100M in 2022 after two signer keys were compromised
+— now reads `⚠ WARNING` (a low threshold), where "any m-of-n ≥ 2 is fine" would
+have waved it through.
 
 ### `solvency` — is the bridge backed?
 
@@ -555,6 +573,9 @@ src/
     registry.ts              the contract-audit family (what `audit` runs)
     onchain.ts               shared on-chain reads (proxy/authority/Safe/timelock probes)
     {upgradeability,authority,compiler,verification,mint,pause}.ts
+  testing/replay-provider.ts record/replay provider (test-only; excluded from the build)
+  fixtures/incidents/*.json  pinned real-contract reads + expected verdicts (offline replay)
+  incident-fixtures.test.ts  replays the fixtures through the real assessors, no network
   bridges.ts                 route registry loader
   commands/                  thin CLI wrappers (each runs one check, or the whole family)
     audit.ts                 meta-command: run every applicable check → report card
@@ -589,6 +610,7 @@ npm run typecheck     # strict tsc, no emit
 npm test              # node:test via tsx — pure logic, no network
 npm run test:coverage # the same, with V8 coverage
 npm run validate:registry  # check bridges.json (shape, chains, checksums, sources)
+npm run capture:fixtures   # re-record the incident fixtures from live mainnet
 npm run build         # compile to dist/ (what `prepublishOnly` ships)
 ```
 
@@ -597,9 +619,16 @@ The backing math, the multi-asset summation, the forensic bisection, the
 parsing, the PQ / authority / mint-authority / pause-guardian / oracle-hygiene
 classifiers, the settlement
 decoders + fill-discovery + diagnosis, the VAA parser / attestation classifiers,
-and the RPC retry/concurrency helpers are unit-tested and run offline. Test
-discovery is explicit (`scripts/run-tests.mjs`) so it behaves identically across
-shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
+and the RPC retry/concurrency helpers are unit-tested and run offline.
+
+**Incident fixtures.** The end-to-end verdicts are regression-tested against
+_real mainnet contracts_ without a network: `scripts/capture-fixtures.ts` records
+the exact on-chain reads (via a `_perform`-level recording provider) against
+named contracts and pins the expected severity; `src/incident-fixtures.test.ts`
+replays those reads through the real assessors offline. So "USDC's proxy admin is
+a single key" and "DAI isn't a proxy" are asserted facts, not prose — and a
+drifting heuristic fails CI. Test discovery is explicit (`scripts/run-tests.mjs`)
+so it behaves identically across shells and Node versions. CI (`.github/workflows/ci.yml`) runs lint, format,
 typecheck, and build once, plus the test suite on Node 20 and 22, for every push
 and PR.
 
