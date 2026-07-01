@@ -5,7 +5,32 @@
 
 import { Contract, getAddress } from "ethers";
 import { Provider } from "../check.js";
-import { EIP1967, ZEPPELINOS, addressFromSlot, withRetry } from "../lib.js";
+import { EIP1967, ZEPPELINOS, addressFromSlot, addressKind, requireAddress, withRetry } from "../lib.js";
+import { RoleHolder } from "../mint-authority-core.js";
+
+/**
+ * Resolve a single-address role getter (`owner()`, `pauser()`, `masterMinter()`,
+ * `blacklister()`, …) and classify the holder as EOA / contract / renounced.
+ * Returns null if the getter reverts or isn't present. Shared by the mint, pause,
+ * and freeze checks, which all resolve their authority this way.
+ */
+export async function resolveRoleHolder(
+  provider: Provider,
+  target: string,
+  getter: string,
+): Promise<RoleHolder | null> {
+  try {
+    const raw = (await withRetry(
+      () => new Contract(target, [`function ${getter}() view returns (address)`], provider)[getter](),
+      { label: `${getter}()` },
+    )) as string;
+    const addr = requireAddress(raw, getter);
+    const kind = /^0x0+$/i.test(addr) ? "renounced" : await addressKind(provider, addr);
+    return { address: addr, kind };
+  } catch {
+    return null;
+  }
+}
 
 /** Follow EIP-1967 / legacy zeppelinos implementation slots; null if not a proxy. */
 export async function resolveImplementation(provider: Provider, target: string): Promise<string | null> {

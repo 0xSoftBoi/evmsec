@@ -1,4 +1,4 @@
-import { Check, CheckContext, CheckReport, Severity, report } from "../check.js";
+import { Check, CheckContext, CheckReport, report, verdictToSeverity } from "../check.js";
 import { withRetry } from "../lib.js";
 import { classifyCompilerBugs, extractSolcVersion } from "../compiler-core.js";
 import { resolveImplementation } from "./onchain.js";
@@ -27,8 +27,6 @@ export const compilerBugsCheck: Check = {
     const evidence: CheckReport["evidence"] = { "solc version": verdict.version ?? "not found in metadata" };
     if (implementation) evidence.implementation = implementation;
 
-    const severity: Severity = verdict.fail ? "critical" : verdict.risk === "elevated" ? "warning" : "ok";
-
     // Only surface the bugs that drive the verdict (medium and above); collapse the
     // long tail of low/very-low bugs into a single count so the output stays sharp.
     const isMinor = (s: string) => s === "low" || s === "very low";
@@ -40,6 +38,13 @@ export const compilerBugsCheck: Check = {
     );
     if (minor > 0) notes.push(`+${minor} low/very-low bug(s) in this version (see the official list).`);
 
-    return report({ id: this.id, title: this.title, severity, summary: verdict.summary, evidence, notes });
+    return report({
+      id: this.id,
+      title: this.title,
+      severity: verdictToSeverity(verdict),
+      summary: verdict.summary,
+      evidence,
+      notes,
+    });
   },
 };

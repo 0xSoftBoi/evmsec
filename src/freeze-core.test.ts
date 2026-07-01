@@ -15,9 +15,7 @@ test("FREEZE_SELECTORS match keccak256 of their signatures", () => {
   const sigs: Record<keyof typeof FREEZE_SELECTORS, string> = {
     blacklist: "blacklist(address)",
     blacklister: "blacklister()",
-    isBlacklisted: "isBlacklisted(address)",
     addBlackList: "addBlackList(address)",
-    isBlackListed: "isBlackListed(address)",
     destroyBlackFunds: "destroyBlackFunds(address)",
   };
   for (const [k, sig] of Object.entries(sigs)) {
@@ -26,7 +24,7 @@ test("FREEZE_SELECTORS match keccak256 of their signatures", () => {
 });
 
 test("classifyFreezeSurface: FiatToken blacklist + blacklister()", () => {
-  const s = classifyFreezeSurface(dispatcher(S.blacklist, S.blacklister, S.isBlacklisted));
+  const s = classifyFreezeSurface(dispatcher(S.blacklist, S.blacklister));
   assert.equal(s.canFreeze, true);
   assert.equal(s.pattern, "fiattoken");
   assert.equal(s.hasBlacklisterGetter, true);
@@ -34,7 +32,7 @@ test("classifyFreezeSurface: FiatToken blacklist + blacklister()", () => {
 });
 
 test("classifyFreezeSurface: Tether addBlackList + destroyBlackFunds (seize)", () => {
-  const s = classifyFreezeSurface(dispatcher(S.addBlackList, S.isBlackListed, S.destroyBlackFunds));
+  const s = classifyFreezeSurface(dispatcher(S.addBlackList, S.destroyBlackFunds));
   assert.equal(s.canFreeze, true);
   assert.equal(s.pattern, "tether");
   assert.equal(s.hasBlacklisterGetter, false);

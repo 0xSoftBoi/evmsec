@@ -1,10 +1,7 @@
-import { Contract } from "ethers";
-import { Check, CheckContext, CheckReport, Severity, report } from "../check.js";
-import { ERC20_ABI, ROLES, addressKind, enumerateRoleHolders, requireAddress, withRetry } from "../lib.js";
+import { Check, CheckContext, CheckReport, report, verdictToSeverity } from "../check.js";
+import { ROLES, addressKind, enumerateRoleHolders, withRetry } from "../lib.js";
 import { OwnerKind, RoleHolder, classifyMintAuthority, classifyMintSurface } from "../mint-authority-core.js";
-import { readCap, resolveImplementation } from "./onchain.js";
-
-const MASTER_MINTER_ABI = ["function masterMinter() view returns (address)"];
+import { readCap, resolveImplementation, resolveRoleHolder } from "./onchain.js";
 
 /**
  * Can the supply be inflated later, and by whom? Scans the bytecode for
@@ -27,14 +24,10 @@ export const mintAuthorityCheck: Check = {
     let owner: string | null = null;
     let ownerKind: OwnerKind = "unknown";
     if (surface.authModel === "ownable" || surface.authModel === "ownable+access-control") {
-      try {
-        const raw = (await withRetry(() => new Contract(target, ERC20_ABI, provider).owner(), {
-          label: "owner()",
-        })) as string;
-        owner = requireAddress(raw, "owner");
-        ownerKind = /^0x0+$/i.test(owner) ? "renounced" : await addressKind(provider, owner);
-      } catch {
-        ownerKind = "unknown";
+      const rh = await resolveRoleHolder(provider, target, "owner");
+      if (rh) {
+        owner = rh.address;
+        ownerKind = rh.kind;
       }
     }
 
@@ -51,18 +44,7 @@ export const mintAuthorityCheck: Check = {
 
     const cap = surface.capped ? await readCap(provider, target) : null;
 
-    let masterMinter: RoleHolder | null = null;
-    if (surface.hasMasterMinter) {
-      try {
-        const raw = (await withRetry(() => new Contract(target, MASTER_MINTER_ABI, provider).masterMinter(), {
-          label: "masterMinter()",
-        })) as string;
-        const addr = requireAddress(raw, "masterMinter");
-        masterMinter = { address: addr, kind: await addressKind(provider, addr) };
-      } catch {
-        masterMinter = null;
-      }
-    }
+    const masterMinter = surface.hasMasterMinter ? await resolveRoleHolder(provider, target, "masterMinter") : null;
 
     const verdict = classifyMintAuthority(surface, ownerKind, owner, minters, masterMinter);
 
@@ -83,7 +65,13 @@ export const mintAuthorityCheck: Check = {
       notes.push(`MINTER_ROLE not enumerated — ${minterNote}`);
     }
 
-    const severity: Severity = verdict.fail ? "critical" : verdict.risk === "elevated" ? "warning" : "ok";
-    return report({ id: this.id, title: this.title, severity, summary: verdict.summary, evidence, notes });
+    return report({
+      id: this.id,
+      title: this.title,
+      severity: verdictToSeverity(verdict),
+      summary: verdict.summary,
+      evidence,
+      notes,
+    });
   },
 };

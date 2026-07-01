@@ -1,4 +1,4 @@
-import { Check, CheckContext, CheckReport, Severity, report } from "../check.js";
+import { Check, CheckContext, CheckReport, report, verdictToSeverity } from "../check.js";
 import { MatchLevel, classifyVerification } from "../verification-core.js";
 
 const DEFAULT_SOURCIFY = "https://sourcify.dev/server";
@@ -18,11 +18,10 @@ export const verificationCheck: Check = {
     const { match, reachable } = await querySourcify(base, ctx.chain.chainId, ctx.target);
     const verdict = classifyVerification({ match, reachable });
 
-    const severity: Severity = verdict.fail ? "critical" : verdict.risk === "elevated" ? "warning" : "ok";
     return report({
       id: this.id,
       title: this.title,
-      severity,
+      severity: verdictToSeverity(verdict),
       summary: verdict.summary,
       evidence: { status: verdict.status, "sourcify match": match ?? "none" },
     });

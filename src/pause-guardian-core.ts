@@ -12,11 +12,8 @@
  * against source.
  */
 
+import { selectorsPresent } from "./lib.js";
 import { AuthModel, OwnerKind, RoleHolder } from "./mint-authority-core.js";
-
-const PUSH1 = 0x60;
-const PUSH4 = 0x63;
-const PUSH32 = 0x7f;
 
 // Verified in the unit test by recomputing from signatures.
 const SEL = {
@@ -29,27 +26,6 @@ const SEL = {
   grantRole: "2f2ff15d", // grantRole(bytes32,address)
 } as const;
 export const PAUSE_SELECTORS = SEL;
-
-/** Which of a set of 4-byte selectors appear in the bytecode's dispatcher. */
-function selectorsPresent(bytecode: string, wanted: Set<string>): Set<string> {
-  const found = new Set<string>();
-  if (!bytecode || bytecode === "0x") return found;
-  const hex = bytecode.toLowerCase().replace(/^0x/, "");
-  const bytes: number[] = [];
-  for (let i = 0; i + 1 < hex.length; i += 2) bytes.push(parseInt(hex.slice(i, i + 2), 16));
-  for (let i = 0; i < bytes.length; i++) {
-    const op = bytes[i];
-    if (op === PUSH4) {
-      let sel = "";
-      for (let j = 1; j <= 4 && i + j < bytes.length; j++) sel += bytes[i + j].toString(16).padStart(2, "0");
-      if (sel.length === 8 && wanted.has(sel)) found.add(sel);
-      i += 4;
-    } else if (op >= PUSH1 && op <= PUSH32) {
-      i += op - PUSH1 + 1;
-    }
-  }
-  return found;
-}
 
 export interface PauseSurface {
   /** has pause() and/or unpause() — transfers can be frozen. */

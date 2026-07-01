@@ -240,6 +240,34 @@ export function addressFromSlot(word: string): string | null {
   return addr === "0x0000000000000000000000000000000000000000" ? null : addr;
 }
 
+/**
+ * Which of a set of 4-byte function selectors appear in a contract's dispatcher.
+ * Walks the bytecode, correctly skipping PUSH immediates so data bytes aren't
+ * mistaken for opcodes, and collects any PUSH4 selector present in `wanted`.
+ */
+export function selectorsPresent(bytecode: string, wanted: Set<string>): Set<string> {
+  const PUSH1 = 0x60;
+  const PUSH4 = 0x63;
+  const PUSH32 = 0x7f;
+  const found = new Set<string>();
+  if (!bytecode || bytecode === "0x") return found;
+  const hex = bytecode.toLowerCase().replace(/^0x/, "");
+  const bytes: number[] = [];
+  for (let i = 0; i + 1 < hex.length; i += 2) bytes.push(parseInt(hex.slice(i, i + 2), 16));
+  for (let i = 0; i < bytes.length; i++) {
+    const op = bytes[i];
+    if (op === PUSH4) {
+      let sel = "";
+      for (let j = 1; j <= 4 && i + j < bytes.length; j++) sel += bytes[i + j].toString(16).padStart(2, "0");
+      if (sel.length === 8 && wanted.has(sel)) found.add(sel);
+      i += 4;
+    } else if (op >= PUSH1 && op <= PUSH32) {
+      i += op - PUSH1 + 1;
+    }
+  }
+  return found;
+}
+
 /** Scale a raw integer with `decimals` up/down to a common 18-decimal fixed point. */
 export function to18(raw: bigint, decimals: number): bigint {
   if (decimals === 18) return raw;

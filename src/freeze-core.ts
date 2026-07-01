@@ -13,42 +13,18 @@
  * the owner for the Tether pattern) and this folds it into a verdict.
  */
 
+import { selectorsPresent } from "./lib.js";
 import { RoleHolder } from "./mint-authority-core.js";
 
-const PUSH1 = 0x60;
-const PUSH4 = 0x63;
-const PUSH32 = 0x7f;
-
-// Verified in the unit test by recomputing from signatures.
+// Verified in the unit test by recomputing from signatures. Only the action
+// selectors distinguish the patterns; the `is(Black)listed` views aren't needed.
 const SEL = {
-  blacklist: "f9f92be4", // blacklist(address)         — FiatToken
-  blacklister: "bd102430", // blacklister()             — FiatToken role getter
-  isBlacklisted: "fe575a87", // isBlacklisted(address)  — FiatToken
-  addBlackList: "0ecb93c0", // addBlackList(address)    — Tether (owner-gated)
-  isBlackListed: "e47d6060", // isBlackListed(address)  — Tether
+  blacklist: "f9f92be4", // blacklist(address)             — FiatToken
+  blacklister: "bd102430", // blacklister()                — FiatToken role getter
+  addBlackList: "0ecb93c0", // addBlackList(address)       — Tether (owner-gated)
   destroyBlackFunds: "f3bdc228", // destroyBlackFunds(address) — Tether (seize/burn)
 } as const;
 export const FREEZE_SELECTORS = SEL;
-
-function selectorsPresent(bytecode: string, wanted: Set<string>): Set<string> {
-  const found = new Set<string>();
-  if (!bytecode || bytecode === "0x") return found;
-  const hex = bytecode.toLowerCase().replace(/^0x/, "");
-  const bytes: number[] = [];
-  for (let i = 0; i + 1 < hex.length; i += 2) bytes.push(parseInt(hex.slice(i, i + 2), 16));
-  for (let i = 0; i < bytes.length; i++) {
-    const op = bytes[i];
-    if (op === PUSH4) {
-      let sel = "";
-      for (let j = 1; j <= 4 && i + j < bytes.length; j++) sel += bytes[i + j].toString(16).padStart(2, "0");
-      if (sel.length === 8 && wanted.has(sel)) found.add(sel);
-      i += 4;
-    } else if (op >= PUSH1 && op <= PUSH32) {
-      i += op - PUSH1 + 1;
-    }
-  }
-  return found;
-}
 
 /** `fiattoken` = blacklister-gated blacklist; `tether` = owner-gated addBlackList. */
 export type FreezePattern = "fiattoken" | "tether" | "none";

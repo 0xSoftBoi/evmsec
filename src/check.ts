@@ -81,6 +81,16 @@ export function report(
   return { evidence: {}, notes: [], ...r };
 }
 
+/**
+ * The standard mapping from a pure-core verdict (`{ fail, risk }`) to a check
+ * `Severity`: a CI-failing verdict is `critical`, an elevated one is `warning`,
+ * everything else is `ok`. Shared by the checks whose cores use this shape
+ * (mint, pause, freeze, compiler, verification); `admin-power` maps its own.
+ */
+export function verdictToSeverity(verdict: { fail: boolean; risk: "critical" | "elevated" | "info" }): Severity {
+  return verdict.fail ? "critical" : verdict.risk === "elevated" ? "warning" : "ok";
+}
+
 // ── Rendering ───────────────────────────────────────────────────────────────
 
 const MARK: Record<Severity, string> = {

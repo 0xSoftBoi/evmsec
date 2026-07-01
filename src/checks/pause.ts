@@ -1,12 +1,11 @@
 import { Contract } from "ethers";
-import { Check, CheckContext, CheckReport, Severity, report } from "../check.js";
-import { ROLES, addressKind, enumerateRoleHolders, requireAddress, withRetry } from "../lib.js";
+import { Check, CheckContext, CheckReport, report, verdictToSeverity } from "../check.js";
+import { ROLES, addressKind, enumerateRoleHolders, withRetry } from "../lib.js";
 import { OwnerKind, RoleHolder } from "../mint-authority-core.js";
 import { classifyPauseGuardian, classifyPauseSurface } from "../pause-guardian-core.js";
-import { resolveImplementation } from "./onchain.js";
+import { resolveImplementation, resolveRoleHolder } from "./onchain.js";
 
-const PAUSE_ABI = ["function paused() view returns (bool)", "function owner() view returns (address)"];
-const PAUSER_ABI = ["function pauser() view returns (address)"];
+const PAUSED_ABI = ["function paused() view returns (bool)"];
 
 /**
  * Can transfers be frozen, are they frozen right now, and who holds the pause
@@ -30,7 +29,7 @@ export const pauseGuardianCheck: Check = {
     if (surface.hasPausedView || surface.pausable) {
       try {
         paused = Boolean(
-          await withRetry(() => new Contract(target, PAUSE_ABI, provider).paused(), { label: "paused()" }),
+          await withRetry(() => new Contract(target, PAUSED_ABI, provider).paused(), { label: "paused()" }),
         );
       } catch {
         paused = null;
@@ -44,17 +43,8 @@ export const pauseGuardianCheck: Check = {
     let pauser: RoleHolder | null = null;
 
     if (surface.hasPauserGetter) {
-      // FiatToken (USDC-class): pausing is gated by pauser(), not owner(). Resolve
-      // and classify that address so we don't misattribute the pause key to owner().
-      try {
-        const raw = (await withRetry(() => new Contract(target, PAUSER_ABI, provider).pauser(), {
-          label: "pauser()",
-        })) as string;
-        const addr = requireAddress(raw, "pauser");
-        pauser = { address: addr, kind: /^0x0+$/i.test(addr) ? "renounced" : await addressKind(provider, addr) };
-      } catch {
-        pauser = null;
-      }
+      // FiatToken (USDC-class): pausing is gated by pauser(), not owner().
+      pauser = await resolveRoleHolder(provider, target, "pauser");
     } else if (surface.authModel === "access-control" || surface.authModel === "ownable+access-control") {
       const found = await enumerateRoleHolders(provider, target, ROLES.PAUSER);
       pauserNote = found.note;
@@ -63,14 +53,10 @@ export const pauseGuardianCheck: Check = {
         for (const a of found.holders) pausers.push({ address: a, kind: await addressKind(provider, a) });
       }
     } else if (surface.authModel === "ownable") {
-      try {
-        const raw = (await withRetry(() => new Contract(target, PAUSE_ABI, provider).owner(), {
-          label: "owner()",
-        })) as string;
-        guardian = requireAddress(raw, "owner");
-        guardianKind = /^0x0+$/i.test(guardian) ? "renounced" : await addressKind(provider, guardian);
-      } catch {
-        guardianKind = "unknown";
+      const rh = await resolveRoleHolder(provider, target, "owner");
+      if (rh) {
+        guardian = rh.address;
+        guardianKind = rh.kind;
       }
     }
 
@@ -93,7 +79,13 @@ export const pauseGuardianCheck: Check = {
       notes.push(`PAUSER_ROLE not enumerated — ${pauserNote}`);
     }
 
-    const severity: Severity = verdict.fail ? "critical" : verdict.risk === "elevated" ? "warning" : "ok";
-    return report({ id: this.id, title: this.title, severity, summary: verdict.summary, evidence, notes });
+    return report({
+      id: this.id,
+      title: this.title,
+      severity: verdictToSeverity(verdict),
+      summary: verdict.summary,
+      evidence,
+      notes,
+    });
   },
 };
