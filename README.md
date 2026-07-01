@@ -293,11 +293,20 @@ npm run evmsec -- pause-guardian 0xWrappedToken --chain polygon [--json]
 
 Same shape as `mint-authority`: follows the proxy, detects the Pausable surface
 and auth model, reads `paused()` to report the **current** state, and resolves
-the guardian — Ownable `owner()` or the enumerated `PAUSER_ROLE` holders,
-classified EOA vs contract. **Exit code is non-zero when a single EOA can freeze
-transfers.** A currently-paused token is flagged prominently regardless of who
-holds the key. Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is
-unit-tested.
+the guardian. It resolves the _actual_ pause authority rather than assuming
+`owner()`:
+
+- **FiatToken (USDC-class)** — a `pauser()` getter gates pausing, **not**
+  `owner()`. The check reads and classifies `pauser()` directly (USDC's is a
+  single EOA — a real single-key freeze authority, correctly attributed to the
+  pauser, not the owner).
+- **OpenZeppelin AccessControl** — enumerates the `PAUSER_ROLE` holders.
+- **Ownable** — reads `owner()`.
+
+**Exit code is non-zero when a single EOA can freeze transfers.** A
+currently-paused token is flagged prominently regardless of who holds the key.
+Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is unit-tested. (Off-chain
+key custody still applies — see [Limitations](#limitations).)
 
 ### `oracle-hygiene` — is this price feed fresh and safe to read right now?
 

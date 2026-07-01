@@ -28,11 +28,16 @@ const SPECS: Spec[] = [
   {
     name: "usdc-fiattokenproxy",
     description:
-      "USDC (FiatTokenProxy). Its upgrade admin is a single externally-owned key, not a multisig — a real, live centralization fact behind one of the largest tokens on Ethereum.",
+      "USDC (FiatTokenProxy). Two real on-chain single-key properties: its upgrade admin is a plain EOA, and pausing is gated by a FiatToken pauser() that is also an EOA (the check attributes this to pauser(), NOT owner() — owner doesn't gate pausing here). Both are single-key on-chain; off-chain custody is unknown.",
     source: "https://etherscan.io/address/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48#code",
     chain: "ethereum",
     address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    expect: { "admin-power": "critical", upgradeability: "critical", "compiler-bugs": "warning" },
+    expect: {
+      "admin-power": "critical",
+      upgradeability: "critical",
+      "pause-guardian": "critical",
+      "compiler-bugs": "warning",
+    },
   },
   {
     name: "dai-non-upgradeable",

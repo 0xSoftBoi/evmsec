@@ -6,6 +6,7 @@ import { classifyPauseGuardian, classifyPauseSurface } from "../pause-guardian-c
 import { resolveImplementation } from "./onchain.js";
 
 const PAUSE_ABI = ["function paused() view returns (bool)", "function owner() view returns (address)"];
+const PAUSER_ABI = ["function pauser() view returns (address)"];
 
 /**
  * Can transfers be frozen, are they frozen right now, and who holds the pause
@@ -40,7 +41,21 @@ export const pauseGuardianCheck: Check = {
     let guardianKind: OwnerKind = "unknown";
     let pausers: RoleHolder[] | undefined;
     let pauserNote: string | undefined;
-    if (surface.authModel === "access-control" || surface.authModel === "ownable+access-control") {
+    let pauser: RoleHolder | null = null;
+
+    if (surface.hasPauserGetter) {
+      // FiatToken (USDC-class): pausing is gated by pauser(), not owner(). Resolve
+      // and classify that address so we don't misattribute the pause key to owner().
+      try {
+        const raw = (await withRetry(() => new Contract(target, PAUSER_ABI, provider).pauser(), {
+          label: "pauser()",
+        })) as string;
+        const addr = requireAddress(raw, "pauser");
+        pauser = { address: addr, kind: /^0x0+$/i.test(addr) ? "renounced" : await addressKind(provider, addr) };
+      } catch {
+        pauser = null;
+      }
+    } else if (surface.authModel === "access-control" || surface.authModel === "ownable+access-control") {
       const found = await enumerateRoleHolders(provider, target, ROLES.PAUSER);
       pauserNote = found.note;
       if (found.method !== "none") {
@@ -59,14 +74,15 @@ export const pauseGuardianCheck: Check = {
       }
     }
 
-    const verdict = classifyPauseGuardian(surface, paused, guardianKind, guardian, pausers);
+    const verdict = classifyPauseGuardian(surface, paused, guardianKind, guardian, pausers, pauser);
 
     const evidence: CheckReport["evidence"] = {
       pausable: surface.pausable,
       "paused now": paused === null ? "unknown" : paused,
-      "auth model": surface.authModel,
+      "auth model": surface.hasPauserGetter ? "FiatToken pauser()" : surface.authModel,
     };
     if (implementation) evidence.implementation = implementation;
+    if (pauser) evidence.pauser = pauser.address;
     if (guardian) evidence.guardian = guardian;
 
     const notes: string[] = [];

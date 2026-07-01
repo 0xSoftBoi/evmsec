@@ -217,6 +217,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`pause-guardian` misattributed the pause key on FiatToken tokens**: USDC-class
+  tokens gate pausing through a separate `pauser()` role, but the check assumed
+  `owner()` and pointed at the wrong address (hedged with "if it gates pausing").
+  It now detects the `pauser()` getter and resolves/classifies that address
+  directly — for USDC it correctly reports the pause authority as a single EOA via
+  `pauser()` (0x4914…8566), not the owner. Mirrors the existing FiatToken
+  `masterMinter()` handling in `mint-authority`. Pinned by the USDC fixture, which
+  now asserts `pause-guardian: critical`. Unit-tested in `pause-guardian-core.ts`,
+  including that an EOA `owner()` no longer forces a critical when a contract
+  `pauser()` actually holds the key.
 - **Test discovery on Node 20**: the previous `tsx --test src/**/*.test.ts`
   relied on glob expansion that neither POSIX `sh` nor the Node 20 test runner
   performs, so the Node 20 CI leg discovered no test files. Discovery is now

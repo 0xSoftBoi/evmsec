@@ -1,6 +1,6 @@
 {
   "name": "usdc-fiattokenproxy",
-  "description": "USDC (FiatTokenProxy). Its upgrade admin is a single externally-owned key, not a multisig — a real, live centralization fact behind one of the largest tokens on Ethereum.",
+  "description": "USDC (FiatTokenProxy). Two real on-chain single-key properties: its upgrade admin is a plain EOA, and pausing is gated by a FiatToken pauser() that is also an EOA (the check attributes this to pauser(), NOT owner() — owner doesn't gate pausing here). Both are single-key on-chain; off-chain custody is unknown.",
   "source": "https://etherscan.io/address/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48#code",
   "chain": "ethereum",
   "chainId": 1,
@@ -8,6 +8,7 @@
   "expect": {
     "admin-power": "critical",
     "upgradeability": "critical",
+    "pause-guardian": "critical",
     "compiler-bugs": "warning"
   },
   "actual": {
@@ -69,6 +70,14 @@
     {
       "key": "{\"method\":\"call\",\"transaction\":{\"to\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"data\":\"0x5c975abb\"},\"blockTag\":\"latest\"}",
       "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "key": "{\"method\":\"call\",\"transaction\":{\"to\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"data\":\"0x9fd0506d\"},\"blockTag\":\"latest\"}",
+      "result": "0x0000000000000000000000004914f61d25e5c567143774b76edbf4d5109a8566"
+    },
+    {
+      "key": "{\"method\":\"getCode\",\"address\":\"0x4914f61d25e5C567143774B76EdbF4D5109a8566\",\"blockTag\":\"latest\"}",
+      "result": "0x"
     }
   ]
 }
