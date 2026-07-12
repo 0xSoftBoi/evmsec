@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-07-12T01:19:54.102Z",
+  "generatedAt": "2026-07-12T07:53:29.654Z",
   "overall": "backed",
   "backed": 11,
   "breached": 0,
   "errored": 0,
   "total": 11,
-  "totalLockedUsd": 2642992450,
+  "totalLockedUsd": 2642434877,
   "routes": [
     {
       "id": "polygon-pos-usdc",
@@ -13,11 +13,11 @@
       "asset": "USDC.e",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1226717086.792701",
-      "minted": "1217172427.11988",
-      "ratioPct": 100.7841,
+      "locked": "1224578429.4242",
+      "minted": "1213491259.341379",
+      "ratioPct": 100.9136,
       "verdict": "BACKED",
-      "lockedUsd": 1226513071,
+      "lockedUsd": 1224304785,
       "pricedVia": "USDC/USD"
     },
     {
@@ -26,11 +26,11 @@
       "asset": "DAI",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "600111819.637004562696202941",
-      "minted": "570232399.39320945199673789",
-      "ratioPct": 105.2398,
+      "locked": "600210319.637004562696202941",
+      "minted": "570320899.39320945199673789",
+      "ratioPct": 105.2408,
       "verdict": "BACKED",
-      "lockedUsd": 600053603,
+      "lockedUsd": 600061612,
       "pricedVia": "DAI/USD"
     },
     {
@@ -39,11 +39,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1978.22180362",
-      "minted": "1948.66963207",
-      "ratioPct": 101.5165,
+      "locked": "1979.2427462",
+      "minted": "1949.69057465",
+      "ratioPct": 101.5157,
       "verdict": "BACKED",
-      "lockedUsd": 126139230,
+      "lockedUsd": 126324832,
       "pricedVia": "BTC/USD"
     },
     {
@@ -56,7 +56,7 @@
       "minted": "18555526.496259717356970295",
       "ratioPct": 100.2329,
       "verdict": "BACKED",
-      "lockedUsd": 18596938,
+      "lockedUsd": 18594135,
       "pricedVia": "DAI/USD"
     },
     {
@@ -65,11 +65,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "Arbitrum One",
-      "locked": "7273.74223068",
-      "minted": "7258.09091738",
+      "locked": "7273.80222651",
+      "minted": "7258.15091321",
       "ratioPct": 100.2156,
       "verdict": "BACKED",
-      "lockedUsd": 463802514,
+      "lockedUsd": 464249191,
       "pricedVia": "BTC/USD"
     },
     {
@@ -82,7 +82,7 @@
       "minted": "2205629.014618199048799454",
       "ratioPct": 101.3286,
       "verdict": "BACKED",
-      "lockedUsd": 17659712,
+      "lockedUsd": 17812171,
       "pricedVia": "LINK/USD"
     },
     {
@@ -95,7 +95,7 @@
       "minted": "773.32400888",
       "ratioPct": 102.5328,
       "verdict": "BACKED",
-      "lockedUsd": 50559140,
+      "lockedUsd": 50607415,
       "pricedVia": "BTC/USD"
     },
     {
@@ -104,11 +104,11 @@
       "asset": "DAI",
       "lockChain": "Ethereum",
       "mintChain": "Base",
-      "locked": "2196789.408238883700612159",
+      "locked": "2170613.041897739601260749",
       "minted": "2077307.196650097295178986",
-      "ratioPct": 105.7517,
+      "ratioPct": 104.4916,
       "verdict": "BACKED",
-      "lockedUsd": 2196576,
+      "lockedUsd": 2170075,
       "pricedVia": "DAI/USD"
     },
     {
@@ -117,11 +117,11 @@
       "asset": "cbETH",
       "lockChain": "Ethereum",
       "mintChain": "Base",
-      "locked": "60339.993875460358731239",
-      "minted": "60265.149080884680878181",
-      "ratioPct": 100.1241,
+      "locked": "60609.780273723420366046",
+      "minted": "60534.935479147742512988",
+      "ratioPct": 100.1236,
       "verdict": "BACKED",
-      "lockedUsd": 122707127,
+      "lockedUsd": 123546969,
       "pricedVia": "cbETH/ETH × ETH/USD"
     },
     {
@@ -134,7 +134,7 @@
       "minted": "6030427.716396",
       "ratioPct": 103.2097,
       "verdict": "BACKED",
-      "lockedUsd": 6222952,
+      "lockedUsd": 6222597,
       "pricedVia": "USDC/USD"
     },
     {
@@ -147,7 +147,7 @@
       "minted": "7820057.869217",
       "ratioPct": 109.2447,
       "verdict": "BACKED",
-      "lockedUsd": 8541585,
+      "lockedUsd": 8541097,
       "pricedVia": "USDC/USD"
     }
   ]
