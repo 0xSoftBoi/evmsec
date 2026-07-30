@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-07-30T01:11:02.380Z",
+  "generatedAt": "2026-07-30T08:02:19.863Z",
   "overall": "backed",
   "backed": 11,
   "breached": 0,
   "errored": 0,
   "total": 11,
-  "totalLockedUsd": 2473153660,
+  "totalLockedUsd": 2476019031,
   "routes": [
     {
       "id": "polygon-pos-usdc",
@@ -13,11 +13,11 @@
       "asset": "USDC.e",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1050105336.831306",
-      "minted": "1040560687.494314",
-      "ratioPct": 100.9172,
+      "locked": "1050233883.520673",
+      "minted": "1034594565.183681",
+      "ratioPct": 101.5116,
       "verdict": "BACKED",
-      "lockedUsd": 1049905817,
+      "lockedUsd": 1049958103,
       "pricedVia": "USDC/USD"
     },
     {
@@ -30,7 +30,7 @@
       "minted": "551178218.352148839870504497",
       "ratioPct": 105.2751,
       "verdict": "BACKED",
-      "lockedUsd": 580126617,
+      "lockedUsd": 580099937,
       "pricedVia": "DAI/USD"
     },
     {
@@ -39,11 +39,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1962.22745221",
-      "minted": "1936.32925431",
-      "ratioPct": 101.3374,
+      "locked": "1961.32432001",
+      "minted": "1935.42612211",
+      "ratioPct": 101.3381,
       "verdict": "BACKED",
-      "lockedUsd": 124708777,
+      "lockedUsd": 125396282,
       "pricedVia": "BTC/USD"
     },
     {
@@ -56,7 +56,7 @@
       "minted": "18565526.134873050832856639",
       "ratioPct": 100.1526,
       "verdict": "BACKED",
-      "lockedUsd": 18589788,
+      "lockedUsd": 18588933,
       "pricedVia": "DAI/USD"
     },
     {
@@ -69,7 +69,7 @@
       "minted": "7296.5698317",
       "ratioPct": 100.1899,
       "verdict": "BACKED",
-      "lockedUsd": 464612077,
+      "lockedUsd": 467388551,
       "pricedVia": "BTC/USD"
     },
     {
@@ -78,11 +78,11 @@
       "asset": "LINK",
       "lockChain": "Ethereum",
       "mintChain": "Arbitrum One",
-      "locked": "2162941.229258435169460546",
+      "locked": "2160434.622725167331227951",
       "minted": "2138679.181125364024097024",
-      "ratioPct": 101.1344,
+      "ratioPct": 101.0172,
       "verdict": "BACKED",
-      "lockedUsd": 18013076,
+      "lockedUsd": 17887805,
       "pricedVia": "LINK/USD"
     },
     {
@@ -91,11 +91,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "OP Mainnet",
-      "locked": "749.75439762",
-      "minted": "732.07626537",
-      "ratioPct": 102.4147,
+      "locked": "749.87279762",
+      "minted": "732.19466537",
+      "ratioPct": 102.4144,
       "verdict": "BACKED",
-      "lockedUsd": 47650416,
+      "lockedUsd": 47942740,
       "pricedVia": "BTC/USD"
     },
     {
@@ -108,7 +108,7 @@
       "minted": "2070231.84138980903938114",
       "ratioPct": 100.2124,
       "verdict": "BACKED",
-      "lockedUsd": 2074175,
+      "lockedUsd": 2074080,
       "pricedVia": "DAI/USD"
     },
     {
@@ -117,11 +117,11 @@
       "asset": "cbETH",
       "lockChain": "Ethereum",
       "mintChain": "Base",
-      "locked": "71014.949487652802032346",
+      "locked": "70966.136165042718467811",
       "minted": "70891.291370467040614753",
-      "ratioPct": 100.1744,
+      "ratioPct": 100.1055,
       "verdict": "BACKED",
-      "lockedUsd": 153181781,
+      "lockedUsd": 153192282,
       "pricedVia": "cbETH/ETH × ETH/USD"
     },
     {
@@ -134,7 +134,7 @@
       "minted": "5609338.428229",
       "ratioPct": 103.3863,
       "verdict": "BACKED",
-      "lockedUsd": 5798187,
+      "lockedUsd": 5797766,
       "pricedVia": "USDC/USD"
     },
     {
@@ -143,11 +143,11 @@
       "asset": "USDC.e",
       "lockChain": "Ethereum",
       "mintChain": "Scroll",
-      "locked": "8494562.861443",
-      "minted": "7569987.722085",
-      "ratioPct": 112.2136,
+      "locked": "7694572.850931",
+      "minted": "7569997.711573",
+      "ratioPct": 101.6456,
       "verdict": "BACKED",
-      "lockedUsd": 8492949,
+      "lockedUsd": 7692552,
       "pricedVia": "USDC/USD"
     }
   ]
