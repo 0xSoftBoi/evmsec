@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-03T08:54:46.774Z",
+  "generatedAt": "2026-08-03T14:08:36.711Z",
   "overall": "backed",
   "backed": 11,
   "breached": 0,
   "errored": 0,
   "total": 11,
-  "totalLockedUsd": 2416719371,
+  "totalLockedUsd": 2427328260,
   "routes": [
     {
       "id": "polygon-pos-usdc",
@@ -13,11 +13,11 @@
       "asset": "USDC.e",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1019210161.942074",
-      "minted": "1009665527.605082",
-      "ratioPct": 100.9453,
+      "locked": "1018100617.752074",
+      "minted": "1005480622.805082",
+      "ratioPct": 101.2551,
       "verdict": "BACKED",
-      "lockedUsd": 1018958376,
+      "lockedUsd": 1017849106,
       "pricedVia": "USDC/USD"
     },
     {
@@ -26,11 +26,11 @@
       "asset": "DAI",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "574487928.97399204233124249",
-      "minted": "546988601.125503267901091377",
-      "ratioPct": 105.0274,
+      "locked": "574387920.393564250145357544",
+      "minted": "546838588.944176867832537433",
+      "ratioPct": 105.0379,
       "verdict": "BACKED",
-      "lockedUsd": 574264815,
+      "lockedUsd": 574194139,
       "pricedVia": "DAI/USD"
     },
     {
@@ -39,11 +39,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1961.76910999",
-      "minted": "1935.87091209",
-      "ratioPct": 101.3378,
+      "locked": "1960.86717031",
+      "minted": "1934.96897241",
+      "ratioPct": 101.3384,
       "verdict": "BACKED",
-      "lockedUsd": 122060061,
+      "lockedUsd": 123970859,
       "pricedVia": "BTC/USD"
     },
     {
@@ -56,7 +56,7 @@
       "minted": "18594058.134873050832856639",
       "ratioPct": 100.1524,
       "verdict": "BACKED",
-      "lockedUsd": 18615164,
+      "lockedUsd": 18616114,
       "pricedVia": "DAI/USD"
     },
     {
@@ -66,10 +66,10 @@
       "lockChain": "Ethereum",
       "mintChain": "Arbitrum One",
       "locked": "7308.12917745",
-      "minted": "7290.13341953",
-      "ratioPct": 100.2468,
+      "minted": "7289.13341953",
+      "ratioPct": 100.2606,
       "verdict": "BACKED",
-      "lockedUsd": 454707280,
+      "lockedUsd": 462037952,
       "pricedVia": "BTC/USD"
     },
     {
@@ -82,7 +82,7 @@
       "minted": "2135941.254807195121302072",
       "ratioPct": 100.8984,
       "verdict": "BACKED",
-      "lockedUsd": 17683767,
+      "lockedUsd": 17823078,
       "pricedVia": "LINK/USD"
     },
     {
@@ -91,11 +91,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "OP Mainnet",
-      "locked": "745.62275594",
-      "minted": "727.01120805",
-      "ratioPct": 102.56,
+      "locked": "743.62275594",
+      "minted": "714.011042",
+      "ratioPct": 104.1472,
       "verdict": "BACKED",
-      "lockedUsd": 46392187,
+      "lockedUsd": 47013665,
       "pricedVia": "BTC/USD"
     },
     {
@@ -108,7 +108,7 @@
       "minted": "2030348.874865848433318332",
       "ratioPct": 102.1901,
       "verdict": "BACKED",
-      "lockedUsd": 2074011,
+      "lockedUsd": 2074117,
       "pricedVia": "DAI/USD"
     },
     {
@@ -117,11 +117,11 @@
       "asset": "cbETH",
       "lockChain": "Ethereum",
       "mintChain": "Base",
-      "locked": "71517.565731319654224245",
-      "minted": "71442.720936743976371187",
+      "locked": "71521.967244134797012128",
+      "minted": "71447.12244955911915907",
       "ratioPct": 100.1047,
       "verdict": "BACKED",
-      "lockedUsd": 148699534,
+      "lockedUsd": 150390197,
       "pricedVia": "cbETH/ETH × ETH/USD"
     },
     {
@@ -130,11 +130,11 @@
       "asset": "USDbC",
       "lockChain": "Ethereum",
       "mintChain": "Base",
-      "locked": "5653243.573182",
-      "minted": "5613160.975515",
-      "ratioPct": 100.714,
+      "locked": "5748124.894572",
+      "minted": "5554334.375714",
+      "ratioPct": 103.4889,
       "verdict": "BACKED",
-      "lockedUsd": 5651847,
+      "lockedUsd": 5746705,
       "pricedVia": "USDC/USD"
     },
     {
