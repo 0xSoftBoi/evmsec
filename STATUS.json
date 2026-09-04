@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-09-03T15:19:13.642Z",
+  "generatedAt": "2026-09-04T01:40:46.384Z",
   "overall": "backed",
   "backed": 11,
   "breached": 0,
   "errored": 0,
   "total": 11,
-  "totalLockedUsd": 2606237066,
+  "totalLockedUsd": 2609987987,
   "routes": [
     {
       "id": "polygon-pos-usdc",
@@ -13,11 +13,11 @@
       "asset": "USDC.e",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1036730624.109031",
-      "minted": "1027187405.741891",
-      "ratioPct": 100.929,
+      "locked": "1036877799.329227",
+      "minted": "1027334570.962087",
+      "ratioPct": 100.9289,
       "verdict": "BACKED",
-      "lockedUsd": 1036526616,
+      "lockedUsd": 1036673763,
       "pricedVia": "USDC/USD"
     },
     {
@@ -30,7 +30,7 @@
       "minted": "492801754.759610678980929459",
       "ratioPct": 101.0333,
       "verdict": "BACKED",
-      "lockedUsd": 497873257,
+      "lockedUsd": 497861467,
       "pricedVia": "DAI/USD"
     },
     {
@@ -39,11 +39,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "Polygon PoS",
-      "locked": "1951.87546101",
-      "minted": "1925.86673907",
-      "ratioPct": 101.3504,
+      "locked": "1951.8783241",
+      "minted": "1925.97913845",
+      "ratioPct": 101.3447,
       "verdict": "BACKED",
-      "lockedUsd": 157470324,
+      "lockedUsd": 157716024,
       "pricedVia": "BTC/USD"
     },
     {
@@ -52,11 +52,11 @@
       "asset": "DAI",
       "lockChain": "Ethereum",
       "mintChain": "Arbitrum One",
-      "locked": "19163692.259174487995547715",
-      "minted": "15237990.995341272371701923",
-      "ratioPct": 125.7625,
+      "locked": "19164025.134433207995547715",
+      "minted": "15238323.870599992371701923",
+      "ratioPct": 125.762,
       "verdict": "BACKED",
-      "lockedUsd": 19162895,
+      "lockedUsd": 19162774,
       "pricedVia": "DAI/USD"
     },
     {
@@ -65,11 +65,11 @@
       "asset": "WBTC",
       "lockChain": "Ethereum",
       "mintChain": "Arbitrum One",
-      "locked": "7210.05259497",
-      "minted": "7181.35666988",
-      "ratioPct": 100.3995,
+      "locked": "7206.05259497",
+      "minted": "7176.63121198",
+      "ratioPct": 100.4099,
       "verdict": "BACKED",
-      "lockedUsd": 581681231,
+      "lockedUsd": 582264759,
       "pricedVia": "BTC/USD"
     },
     {
@@ -79,10 +79,10 @@
       "lockChain": "Ethereum",
       "mintChain": "Arbitrum One",
       "locked": "2008888.018896242930407998",
-      "minted": "1985439.675941198060815937",
-      "ratioPct": 101.181,
+      "minted": "1983104.574905603992847675",
+      "ratioPct": 101.3001,
       "verdict": "BACKED",
-      "lockedUsd": 23543685,
+      "lockedUsd": 23685238,
       "pricedVia": "LINK/USD"
     },
     {
@@ -95,7 +95,7 @@
       "minted": "694.84598977",
       "ratioPct": 101.8986,
       "verdict": "BACKED",
-      "lockedUsd": 57122036,
+      "lockedUsd": 57211079,
       "pricedVia": "BTC/USD"
     },
     {
@@ -108,7 +108,7 @@
       "minted": "1791303.336424739008404736",
       "ratioPct": 100.2455,
       "verdict": "BACKED",
-      "lockedUsd": 1795627,
+      "lockedUsd": 1795584,
       "pricedVia": "DAI/USD"
     },
     {
@@ -117,11 +117,11 @@
       "asset": "cbETH",
       "lockChain": "Ethereum",
       "mintChain": "Base",
-      "locked": "77699.560459386049577952",
-      "minted": "76984.408277559000277745",
-      "ratioPct": 100.9289,
+      "locked": "77848.685197053397278539",
+      "minted": "77133.533015226347978332",
+      "ratioPct": 100.9271,
       "verdict": "BACKED",
-      "lockedUsd": 219686672,
+      "lockedUsd": 222201994,
       "pricedVia": "cbETH/ETH × ETH/USD"
     },
     {
@@ -130,11 +130,11 @@
       "asset": "USDbC",
       "lockChain": "Ethereum",
       "mintChain": "Base",
-      "locked": "6198804.150821",
-      "minted": "5986030.500594",
-      "ratioPct": 103.5545,
+      "locked": "6199396.113183",
+      "minted": "5986622.462956",
+      "ratioPct": 103.5541,
       "verdict": "BACKED",
-      "lockedUsd": 6197584,
+      "lockedUsd": 6198176,
       "pricedVia": "USDC/USD"
     },
     {
@@ -143,11 +143,11 @@
       "asset": "USDC.e",
       "lockChain": "Ethereum",
       "mintChain": "Scroll",
-      "locked": "5178157.154835",
-      "minted": "5053681.485701",
-      "ratioPct": 102.463,
+      "locked": "5218156.555335",
+      "minted": "5093680.886201",
+      "ratioPct": 102.4437,
       "verdict": "BACKED",
-      "lockedUsd": 5177138,
+      "lockedUsd": 5217130,
       "pricedVia": "USDC/USD"
     }
   ]
