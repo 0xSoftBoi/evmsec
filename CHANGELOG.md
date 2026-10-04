@@ -20,6 +20,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `src/commands/audit-bridge.ts`. Research context:
   `docs/RESEARCH-2026-10-key-compromise.md`.
 
+- **`authority <snapshot|check|watch>` — signer-set drift monitoring.**
+  Snapshots the authority-relevant state of bridge infrastructure into a
+  committed baseline file (`authority snapshot --route <id>` resolves each
+  escrow's and the wrapped token's authority automatically), then `check`
+  (CI: exit non-zero on ANY drift) or `watch` (alert once per
+  drift/recovery transition, optional webhook). Tracked per address: kind,
+  codehash (proxy upgrades fire), Safe owners/threshold/enabled modules,
+  timelock delay, EIP-7702 delegation. Pure diff/transition logic in
+  `src/authority-watch-core.ts` (unit-tested); capture readers
+  (`readSafeComposition` with module pagination, `captureAuthoritySnapshot`)
+  in `src/checks/onchain.ts`, covered by deterministic fake-provider tests.
+
 - **Vercel deployment for the Watchtower (serverless, read-only).** `api/` +
   `vercel.json` adapt the dashboard to a serverless platform: `/api/status` computes
   the sweep on demand with CDN caching (`s-maxage=300, stale-while-revalidate=3600`),
