@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`audit-bridge <route-id>` — one report card for a whole bridge route.**
+  Runs the solvency invariant plus the full contract-audit check family
+  (`verification-status`, `compiler-bugs`, `upgradeability`, `admin-power`,
+  `mint-authority`, `pause-guardian`, `freeze-authority`) against every
+  lock-leg escrow and the wrapped token, with one severity-ranked report,
+  one exit code, and `--json` / `--sarif` / `--fail-on` support. Solvency
+  maps onto the check scale (`BACKED` → ok, `UNDERCOLLATERALIZED` →
+  critical, `NO_SUPPLY` → warning, `ERROR` → skip). Pure composition logic
+  lives in `src/audit-bridge-core.ts` (unit-tested); the thin command is
+  `src/commands/audit-bridge.ts`. Research context:
+  `docs/RESEARCH-2026-10-key-compromise.md`.
+
 - **`authority <snapshot|check|watch>` — signer-set drift monitoring.**
   Snapshots the authority-relevant state of bridge infrastructure into a
   committed baseline file (`authority snapshot --route <id>` resolves each
