@@ -102,7 +102,8 @@ const MARK: Record<Severity, string> = {
 
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
-function renderReport(c: ChainConfig, r: CheckReport, lines: string[]): void {
+/** One check's human-readable block. Exported so multi-target commands (audit-bridge) can reuse the exact same rendering. */
+export function renderReport(c: ChainConfig, r: CheckReport, lines: string[]): void {
   lines.push(`  ${r.title.padEnd(22)} ${MARK[r.severity]}`);
   lines.push(`    ${r.summary}`);
   for (const [k, v] of Object.entries(r.evidence)) {

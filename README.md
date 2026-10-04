@@ -94,6 +94,24 @@ means every check gets machine output for free:
 excluded — they target a feed / route / tx-pair / VAA, not a generic contract.
 It's a heuristic aggregate of on-chain reads, not a substitute for an audit.
 
+### `audit-bridge` — one report card for a whole bridge route
+
+Point `audit-bridge` at a route id from the registry and it runs the
+**solvency invariant** plus the full contract-audit family against every
+lock-leg escrow (source chains) and the wrapped token (mint chain) — one
+severity-ranked report card, one exit code.
+
+```bash
+npm run evmsec -- audit-bridge polygon-pos-usdc
+npm run evmsec -- audit-bridge polygon-pos-usdc --fail-on warning --json
+```
+
+The solvency finding maps onto the same severity scale (`BACKED` → ok,
+`UNDERCOLLATERALIZED` → critical, `NO_SUPPLY` → warning, `ERROR` → skip),
+and `--json` / `--sarif` / `--fail-on` work exactly as they do for `audit`.
+For SARIF, the solvency finding is anchored at the wrapped token so it lands
+in the Security tab with a meaningful location.
+
 #### What it catches (regression-tested against real contracts)
 
 The verdicts below aren't marketing — they're **pinned in a test suite**. Each
