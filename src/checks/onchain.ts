@@ -3,10 +3,11 @@
  * the verdict logic lives in the pure `*-core.ts` modules, not here.
  */
 
-import { Contract, getAddress } from "ethers";
+import { Contract, getAddress, keccak256 } from "ethers";
 import { Provider } from "../check.js";
 import { EIP1967, ZEPPELINOS, addressFromSlot, addressKind, requireAddress, withRetry } from "../lib.js";
 import { RoleHolder } from "../mint-authority-core.js";
+import { AuthoritySnapshot, delegationTarget } from "../authority-watch-core.js";
 
 /**
  * Resolve a single-address role getter (`owner()`, `pauser()`, `masterMinter()`,
@@ -97,6 +98,103 @@ export async function probeTimelock(provider: Provider, addr: string): Promise<n
     }
   }
   return null;
+}
+
+/** Full Gnosis Safe composition: threshold, owner list, and enabled modules. Null if not a Safe. */
+export interface SafeComposition {
+  threshold: number;
+  /** EIP-55, as returned by the Safe (not sorted — the diff sorts). */
+  owners: string[];
+  /** EIP-55 enabled modules, paginated via getModulesPaginated. */
+  modules: string[];
+}
+
+const SENTINEL = "0x0000000000000000000000000000000000000001";
+
+export async function readSafeComposition(provider: Provider, addr: string): Promise<SafeComposition | null> {
+  try {
+    const safe = new Contract(
+      addr,
+      [
+        "function getThreshold() view returns (uint256)",
+        "function getOwners() view returns (address[])",
+        "function getModulesPaginated(address start, uint256 pageSize) view returns (address[] array, address next)",
+      ],
+      provider,
+    );
+    const [threshold, owners] = await Promise.all([
+      withRetry(() => safe.getThreshold(), { label: "getThreshold" }),
+      withRetry(() => safe.getOwners(), { label: "getOwners" }),
+    ]);
+    // Paginate modules; a Safe without the method (very old) reads as no modules.
+    const modules: string[] = [];
+    try {
+      let start = SENTINEL;
+      for (let i = 0; i < 20; i++) {
+        const [array, next] = (await withRetry(() => safe.getModulesPaginated(start, 10), {
+          label: "getModulesPaginated",
+        })) as [string[], string];
+        for (const m of array) modules.push(getAddress(m));
+        if (getAddress(next) === getAddress(SENTINEL)) break;
+        start = next;
+      }
+    } catch {
+      // no module support — treat as zero modules rather than "not a Safe"
+    }
+    return {
+      threshold: Number(threshold),
+      owners: (owners as string[]).map((o) => getAddress(o)),
+      modules,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Capture one address's authority-relevant state for baseline / drift
+ * comparison. Kind detection order: 7702-delegated EOA → Safe → timelock →
+ * plain EOA → contract. Never throws for an unresolvable address — an
+ * unreadable target snapshots as `unknown` so its *appearance* later still
+ * diffs (fail visible, not silent).
+ */
+export async function captureAuthoritySnapshot(
+  provider: Provider,
+  chainKey: string,
+  address: string,
+  label: string,
+  guards?: string,
+): Promise<AuthoritySnapshot> {
+  const addr = requireAddress(address, "snapshot address");
+  const at = new Date().toISOString();
+  const base = { address: addr, chain: chainKey, label, capturedAt: at, guards };
+
+  let code: string;
+  try {
+    code = await withRetry(() => provider.getCode(addr), { label: "getCode" });
+  } catch {
+    return { ...base, kind: "unknown", codehash: "unreadable" };
+  }
+  const codehash = keccak256(code);
+
+  // EIP-7702 delegation: the account is still an EOA, but its code executes.
+  const delegate = delegationTarget(code);
+  if (delegate !== null) {
+    return { ...base, kind: "eoa", codehash, delegation: getAddress(delegate) };
+  }
+  if (code === "0x") {
+    return { ...base, kind: "eoa", codehash, delegation: null };
+  }
+
+  const safe = await readSafeComposition(provider, addr);
+  if (safe) {
+    return { ...base, kind: "safe", codehash, owners: safe.owners, threshold: safe.threshold, modules: safe.modules };
+  }
+  const delaySec = await probeTimelock(provider, addr);
+  if (delaySec !== null) {
+    return { ...base, kind: "timelock", codehash, minDelaySec: delaySec };
+  }
+  return { ...base, kind: "contract", codehash };
 }
 
 /** Best-effort read of a supply cap (`cap()` / `maxSupply()`) as a string, or null. */

@@ -12,11 +12,13 @@ import { compilerBugs } from "./commands/compiler-bugs.js";
 import { verificationStatus } from "./commands/verification-status.js";
 import { freezeAuthority } from "./commands/freeze-authority.js";
 import { audit } from "./commands/audit.js";
+import { authority } from "./commands/authority.js";
 import { deps } from "./commands/deps.js";
 import { serve } from "./commands/serve.js";
 
 const COMMANDS: Record<string, (args: string[]) => Promise<void>> = {
   audit,
+  authority,
   deps,
   solvency,
   upgradeability,
@@ -40,6 +42,9 @@ usage: evmsec <command> [args]
 commands:
   audit <address>               run every applicable check on a contract and
                                   print one report card (non-zero if any fails)
+  authority <snapshot|          signer-set drift monitoring: snapshot a Safe /
+  check|watch>                   timelock / authority into a baseline file,
+                                 then check (CI) or watch (alert on any drift)
   deps [manifest]               audit your on-chain dependencies (the external
                                   contracts you trust) from a deps.json manifest
   solvency <route-id|--all>     is a lock-and-mint bridge fully backed?

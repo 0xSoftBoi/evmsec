@@ -470,6 +470,34 @@ currently-paused token is flagged prominently regardless of who holds the key.
 Heuristic, honestly scoped; logic in `pause-guardian-core.ts` is unit-tested. (Off-chain
 key custody still applies — see [Limitations](#limitations).)
 
+### `authority` — signer-set drift monitoring
+
+Point-in-time checks can't see a signer set change on a Tuesday — and key
+compromise has become crypto's dominant loss vector (~76% of stolen value, TRM
+Labs H1 2026). `authority` snapshots the authority-relevant state of bridge
+infrastructure and diffs it on every run:
+
+```bash
+# snapshot a route's escrows + wrapped token + each contract's resolved authority
+npm run evmsec -- authority snapshot --route polygon-pos-usdc --out authority.json
+
+# or snapshot explicit addresses
+npm run evmsec -- authority snapshot --address 0xSafe... --chain ethereum --label "Bridge multisig"
+
+# CI: exit non-zero on ANY drift (owner added/removed, threshold, modules,
+# timelock delay, 7702 delegation, codehash, authority kind)
+npm run evmsec -- authority check --baseline authority.json
+
+# watch: poll and alert once per drift/recovery transition
+npm run evmsec -- authority watch --baseline authority.json --interval 300 --webhook https://...
+```
+
+Each entry records the kind (`safe` / `timelock` / `eoa` / `contract`), the
+codehash (proxy upgrades fire as drift), and for Safes the full owner list,
+threshold, and enabled modules — an added module is a back door around the
+threshold, so it diffs too. An EOA that gains an EIP-7702 delegation is a
+takeover until proven otherwise.
+
 ### `freeze-authority` — can an individual holder be frozen or seized?
 
 `pause-guardian` covers freezing _everyone at once_. This is the targeted
