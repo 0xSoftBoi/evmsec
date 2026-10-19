@@ -56,7 +56,7 @@ jobs:
       # endpoint can't cry wolf. De-duped via the `bridge-breach` label: one open
       # issue at a time, closed automatically when every route is backed again.
       - name: Alert on breach / recover
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require("fs");
